@@ -26,12 +26,21 @@ import {
   resolveServiceDomain,
   ServiceDomain
 } from '../utils/establishment-context';
+import {
+  calculateCommercialOptionBreakdown,
+  evaluateStudioPriceAdjustments,
+  normalizeCommercialPriceOptions,
+  normalizeStudioAccessConfig,
+  normalizeStudioPriceAdjustments,
+  normalizeStudioServiceType,
+  StudioServiceType
+} from '../utils/studio-access-and-commercial';
 
-function frequencyConfigForSave(raw: unknown, profile: string, domain: string, mode: unknown) {
+function frequencyConfigForSave(raw: unknown, profile: string, domain: string, mode: unknown, studioServiceType?: StudioServiceType) {
   try {
     const config = normalizeFrequencyPricing(raw);
-    if (config && (!supportsStudioFeatures(profile) || domain !== 'studio')) throw new Error('Preços por frequência estão disponíveis apenas no perfil Studio.');
-    if (config?.enabled && !supportsFrequencyPricing(mode)) throw new Error('Preços por frequência exigem aulas com grade e cobrança periódica compatível.');
+    if (config && (!supportsStudioFeatures(profile) || domain !== 'studio')) throw new Error('Preços por frequência estão disponíveis apenas no perfil Academia & Studio.');
+    if (config?.enabled && !supportsFrequencyPricing(mode) && studioServiceType !== 'facility_access') throw new Error('Preços por frequência exigem aulas com grade e cobrança periódica compatível.');
     return config;
   } catch (error: any) { throw Object.assign(error, { status: 400 }); }
 }
@@ -480,6 +489,15 @@ export class ServiceController {
           s.default_template_id,
           s.linked_template_ids_json,
           s.service_domain,
+          COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+          COALESCE(s.requires_appointment, 1) as requires_appointment,
+          COALESCE(s.requires_active_contract, 0) as requires_active_contract,
+          COALESCE(s.allow_public_booking, 1) as allow_public_booking,
+          s.effective_start_date,
+          s.effective_end_date,
+          s.access_config_json,
+          s.pricing_adjustments_json,
+          s.commercial_price_options_json,
           COALESCE(s.availability_mode, 'professional_schedule') as availability_mode,
           s.modality_category,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
@@ -532,6 +550,15 @@ export class ServiceController {
             ...srv,
             catalog_price: Number(srv.price || 0),
             service_kind: 'individual',
+            studio_service_type: 'individual',
+            requires_appointment: 1,
+            requires_active_contract: 0,
+            allow_public_booking: 1,
+            effective_start_date: null,
+            effective_end_date: null,
+            access_config: null,
+            pricing_adjustments: [],
+            commercial_price_options: [],
             default_capacity: null,
             service_domain: 'clinical',
             billing_mode: 'per_session',
@@ -565,6 +592,25 @@ export class ServiceController {
         }
         const schedules = schedulesByService.get(srv.id) || [];
         const recConfig = parseServiceRecurrenceConfig(srv);
+        const resolvedStudioType = resolvedDomain === 'studio'
+          ? normalizeStudioServiceType(srv.studio_service_type, srv.service_kind)
+          : 'individual';
+        const resolvedRequiresAppt =
+          resolvedDomain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled')
+            ? 0
+            : (Number(srv.requires_appointment ?? 1) === 0 && resolvedDomain === 'studio' ? 0 : 1);
+        const accessConfig =
+          resolvedDomain === 'studio' && resolvedStudioType === 'facility_access'
+            ? normalizeStudioAccessConfig(srv.access_config_json)
+            : null;
+        const pricingAdjustments =
+          resolvedDomain === 'studio'
+            ? normalizeStudioPriceAdjustments(srv.pricing_adjustments_json)
+            : [];
+        const commercialPriceOptions =
+          resolvedDomain === 'studio'
+            ? normalizeCommercialPriceOptions(srv.commercial_price_options_json)
+            : [];
         const billConfig = resolvedDomain === 'studio'
           ? parseServiceBillingConfig(srv)
           : {
@@ -586,7 +632,10 @@ export class ServiceController {
         const scheduleDiagnostics = (srv.service_kind || 'individual') === 'group'
           ? ClassScheduleService.diagnoseServiceSchedules(tenantId, srv.id, schedules)
           : null;
-        const supportsCustomAvailability = resolvedDomain === 'studio' && (srv.service_kind || 'individual') === 'individual';
+        const supportsCustomAvailability =
+          resolvedDomain === 'studio' &&
+          (srv.service_kind || 'individual') === 'individual' &&
+          resolvedStudioType === 'individual';
         const resolvedAvailMode: ServiceAvailabilityMode = supportsCustomAvailability && srv.availability_mode === 'custom_windows'
           ? 'custom_windows'
           : 'professional_schedule';
@@ -598,6 +647,15 @@ export class ServiceController {
           ...srv,
           catalog_price: Number(srv.price || 0) > 0 ? Number(srv.price) : Number(billConfig.periodicPrice || 0),
           service_domain: resolvedDomain,
+          studio_service_type: resolvedStudioType,
+          requires_appointment: resolvedRequiresAppt,
+          requires_active_contract: resolvedDomain === 'studio' ? Number(srv.requires_active_contract ?? (resolvedStudioType === 'facility_access' ? 1 : 0)) : 0,
+          allow_public_booking: Number(srv.allow_public_booking ?? 1) === 0 ? 0 : 1,
+          effective_start_date: srv.effective_start_date || null,
+          effective_end_date: srv.effective_end_date || null,
+          access_config: accessConfig,
+          pricing_adjustments: pricingAdjustments,
+          commercial_price_options: commercialPriceOptions,
           billing_mode: billConfig.billingMode,
           periodic_price: billConfig.periodicPrice,
           billing_cycle_months: billConfig.billingCycleMonths,
@@ -680,7 +738,13 @@ export class ServiceController {
         ? req.body.classSchedules
         : (Array.isArray(req.body?.class_schedules) ? req.body.class_schedules : []);
       const rawKind = serviceKind ?? service_kind;
-      const resolvedKind = (rawKind || 'individual') === 'group' ? 'group' : 'individual';
+      const rawStudioType = req.body?.studioServiceType ?? req.body?.studio_service_type;
+      const resolvedStudioType: StudioServiceType = isStudioCompat
+        ? normalizeStudioServiceType(rawStudioType, rawKind)
+        : 'individual';
+      const resolvedKind = resolvedStudioType === 'group' || (rawKind || 'individual') === 'group' ? 'group' : 'individual';
+      const isNonScheduledStudioService =
+        isStudioCompat && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled');
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
       const rawRequestedDomain = serviceDomain ?? service_domain;
       const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
@@ -702,11 +766,22 @@ export class ServiceController {
       const rawLinkedTplIds = linkedTemplateIds !== undefined ? linkedTemplateIds : linked_template_ids;
       const rawAvailabilityMode = availabilityMode !== undefined ? availabilityMode : availability_mode;
       const rawAvailabilityWindows = availabilityWindows !== undefined ? availabilityWindows : availability_windows;
+      const rawAccessConfig = req.body?.accessConfig !== undefined ? req.body.accessConfig : req.body?.access_config;
+      const rawPricingAdjustments = req.body?.pricingAdjustments !== undefined ? req.body.pricingAdjustments : req.body?.pricing_adjustments;
+      const rawCommercialOptions = req.body?.commercialPriceOptions !== undefined ? req.body.commercialPriceOptions : req.body?.commercial_price_options;
+      const rawRequiresActiveContract = req.body?.requiresActiveContract !== undefined ? req.body.requiresActiveContract : req.body?.requires_active_contract;
+      const rawAllowPublicBooking = req.body?.allowPublicBooking !== undefined ? req.body.allowPublicBooking : req.body?.allow_public_booking;
+      const rawEffectiveStartDate = req.body?.effectiveStartDate !== undefined ? req.body.effectiveStartDate : req.body?.effective_start_date;
+      const rawEffectiveEndDate = req.body?.effectiveEndDate !== undefined ? req.body.effectiveEndDate : req.body?.effective_end_date;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
 
       if (!isStudioCompat) {
         if (
           resolvedKind === 'group' ||
+          (rawStudioType !== undefined && String(rawStudioType).trim().toLowerCase() !== 'individual') ||
+          rawAccessConfig !== undefined ||
+          rawPricingAdjustments !== undefined ||
+          rawCommercialOptions !== undefined ||
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           rawClassSchedules.length > 0 ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
@@ -723,7 +798,7 @@ export class ServiceController {
           (requestedLinkedIds && requestedLinkedIds.some(pid => pid !== professionalId))
         ) {
           res.status(400).json({
-            error: 'Aulas coletivas, cobrança periódica/por pacote, múltiplos instrutores, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
+            error: 'Aulas coletivas, planos de acesso, cobrança periódica/por pacote, múltiplos instrutores, capacidade de turma e recorrência avançada de Academia & Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
           });
           return;
         }
@@ -731,7 +806,7 @@ export class ServiceController {
 
       if (establishmentProfile === 'studio' && String(rawRequestedDomain || '').trim().toLowerCase() === 'clinical') {
         res.status(400).json({
-          error: 'Estabelecimentos configurados exclusivamente como Studio não criam serviços clínicos tradicionais.'
+          error: 'Estabelecimentos configurados exclusivamente como Academia & Studio não criam serviços clínicos tradicionais.'
         });
         return;
       }
@@ -740,10 +815,15 @@ export class ServiceController {
       if (resolvedKind === 'group') {
         const capNum = Number(rawCapacity);
         if (!Number.isInteger(capNum) || capNum < 1 || capNum > 500) {
-          res.status(400).json({ error: 'Para aulas coletivas/turmas, informe um número inteiro positivo de vagas.' });
+          res.status(400).json({ error: 'Para aulas coletivas/turmas ou duplas, informe um número inteiro positivo de vagas.' });
           return;
         }
         resolvedCapacity = capNum;
+      } else if (resolvedStudioType === 'facility_access' && rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') {
+        const capNum = Number(rawCapacity);
+        if (Number.isInteger(capNum) && capNum > 0) {
+          resolvedCapacity = Math.min(5000, capNum);
+        }
       }
       const resolvedModalityCategory = isStudioCompat && (modalityCategory ?? modality_category ?? null)
         ? String(modalityCategory ?? modality_category).trim()
@@ -754,42 +834,42 @@ export class ServiceController {
         return;
       }
 
-      if (!professionalId) {
-        res.status(400).json({ error: 'A seleção do profissional é obrigatória para cadastrar o serviço.' });
-        return;
-      }
-
-      const prof = db.prepare('SELECT id, name FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId) as any;
-      if (!prof) {
-        res.status(400).json({ error: 'Profissional selecionado não encontrado na clínica' });
-        return;
-      }
-
-      // Validação de segurança: módulo de atendimento permitido para o profissional
-      const availableModules = getAvailableModulesForProfessional(professionalId, tenantId);
+      let prof: any = null;
       let targetModule: string | null = null;
 
-      if (clinicalModule) {
-        const isAllowed = availableModules.some(m => m.code === clinicalModule);
-        if (!isAllowed) {
-          res.status(400).json({ error: `O módulo "${clinicalModule}" não é permitido para este profissional.` });
+      if (professionalId) {
+        prof = db.prepare('SELECT id, name FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId) as any;
+        if (!prof) {
+          res.status(400).json({ error: 'Profissional selecionado não encontrado na clínica' });
           return;
         }
-        targetModule = clinicalModule;
+        const availableModules = getAvailableModulesForProfessional(professionalId, tenantId);
+        if (clinicalModule) {
+          const isAllowed = availableModules.some(m => m.code === clinicalModule);
+          if (!isAllowed) {
+            res.status(400).json({ error: `O módulo "${clinicalModule}" não é permitido para este profissional.` });
+            return;
+          }
+          targetModule = clinicalModule;
+        } else {
+          targetModule = availableModules.length === 1 ? availableModules[0].code : (availableModules[0]?.code || null);
+        }
+      } else if (!isNonScheduledStudioService) {
+        res.status(400).json({ error: 'A seleção do profissional é obrigatória para cadastrar o serviço.' });
+        return;
       } else {
-        // Se profissional possui apenas 1 módulo disponível, seleciona-o automaticamente
-        targetModule = availableModules.length === 1 ? availableModules[0].code : (availableModules[0]?.code || null);
+        targetModule = clinicalModule || 'ZemdaPersonal';
       }
 
       const resolvedDomain: ServiceDomain = resolveServiceDomain({
         establishmentProfile,
-        serviceDomain: rawRequestedDomain,
+        serviceDomain: rawRequestedDomain || (isNonScheduledStudioService ? 'studio' : undefined),
         serviceKind: resolvedKind,
         clinicalModule: targetModule
       });
 
-      if (establishmentProfile === 'mixed' && resolvedDomain === 'clinical' && resolvedKind === 'group') {
-        res.status(400).json({ error: 'Serviços clínicos em estabelecimentos mistos devem ser individuais. Selecione o segmento Studio para criar aula coletiva / turma.' });
+      if (establishmentProfile === 'mixed' && resolvedDomain === 'clinical' && (resolvedKind === 'group' || resolvedStudioType !== 'individual')) {
+        res.status(400).json({ error: 'Serviços clínicos em estabelecimentos mistos devem ser individuais. Selecione o segmento Academia & Studio para criar aula coletiva, turma ou plano de acesso.' });
         return;
       }
 
@@ -840,7 +920,38 @@ export class ServiceController {
         return;
       }
 
-      const frequencyPricing = frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, resolvedDomain, billNorm.billingMode);
+      const frequencyPricing = frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, resolvedDomain, billNorm.billingMode, resolvedStudioType);
+
+      const normalizedAccessConfig =
+        isStudioCompat && resolvedDomain === 'studio' && resolvedStudioType === 'facility_access'
+          ? normalizeStudioAccessConfig(rawAccessConfig)
+          : null;
+      const normalizedPricingAdjustments =
+        isStudioCompat && resolvedDomain === 'studio'
+          ? normalizeStudioPriceAdjustments(rawPricingAdjustments)
+          : [];
+      const normalizedCommercialOptions =
+        isStudioCompat && resolvedDomain === 'studio'
+          ? normalizeCommercialPriceOptions(rawCommercialOptions)
+          : [];
+      const resolvedRequiresAppointment =
+        isStudioCompat && resolvedDomain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled')
+          ? 0
+          : 1;
+      const resolvedRequiresActiveContract =
+        isStudioCompat && resolvedDomain === 'studio'
+          ? (rawRequiresActiveContract !== undefined ? (rawRequiresActiveContract ? 1 : 0) : (resolvedStudioType === 'facility_access' ? 1 : 0))
+          : 0;
+      const resolvedAllowPublicBooking =
+        rawAllowPublicBooking === false || rawAllowPublicBooking === 0 || rawAllowPublicBooking === '0' ? 0 : 1;
+      const resolvedEffectiveStartDate =
+        isStudioCompat && resolvedDomain === 'studio' && rawEffectiveStartDate && /^\d{4}-\d{2}-\d{2}$/.test(String(rawEffectiveStartDate).slice(0, 10))
+          ? String(rawEffectiveStartDate).slice(0, 10)
+          : null;
+      const resolvedEffectiveEndDate =
+        isStudioCompat && resolvedDomain === 'studio' && rawEffectiveEndDate && /^\d{4}-\d{2}-\d{2}$/.test(String(rawEffectiveEndDate).slice(0, 10))
+          ? String(rawEffectiveEndDate).slice(0, 10)
+          : null;
 
       const tplNorm = normalizeServiceTemplatesForSave({
         tenantId,
@@ -857,27 +968,31 @@ export class ServiceController {
       const effectiveCreatePrice =
         rawPriceNum > 0
           ? rawPriceNum
-          : (billNorm.periodicPrice && billNorm.periodicPrice > 0 ? Number(billNorm.periodicPrice) : 0);
+          : (billNorm.periodicPrice && billNorm.periodicPrice > 0
+              ? Number(billNorm.periodicPrice)
+              : (normalizedCommercialOptions.length > 0 ? normalizedCommercialOptions[0].amountCents / 100 : 0));
 
       const resolvedMinLeadTimeHours = (minLeadTimeHours !== undefined && minLeadTimeHours !== null && minLeadTimeHours !== '' && !Number.isNaN(Number(minLeadTimeHours)))
         ? Math.max(0, Number(minLeadTimeHours))
-        : 2;
+        : (resolvedRequiresAppointment === 0 ? 0 : 2);
       const resolvedMaxAdvanceDays = (maxAdvanceDays !== undefined && maxAdvanceDays !== null && maxAdvanceDays !== '' && !Number.isNaN(Number(maxAdvanceDays)))
         ? Math.max(1, Number(maxAdvanceDays))
         : 60;
 
       const resolvedAvailProfIds = isStudioCompat && resolvedDomain === 'studio'
         ? Array.from(new Set([professionalId, ...(requestedLinkedIds || [])].filter(Boolean)))
-        : [professionalId];
-      const availNorm = normalizeAndValidateServiceAvailability({
-        tenantId,
-        isStudioCompat,
-        serviceDomain: resolvedDomain,
-        serviceKind: resolvedKind,
-        professionalIds: resolvedAvailProfIds,
-        rawAvailabilityMode,
-        rawAvailabilityWindows
-      });
+        : (professionalId ? [professionalId] : []);
+      const availNorm = resolvedRequiresAppointment === 0
+        ? { availabilityMode: 'professional_schedule' as const, shouldPersistWindows: false, windows: [] as any[], error: undefined }
+        : normalizeAndValidateServiceAvailability({
+            tenantId,
+            isStudioCompat,
+            serviceDomain: resolvedDomain,
+            serviceKind: resolvedKind,
+            professionalIds: resolvedAvailProfIds,
+            rawAvailabilityMode,
+            rawAvailabilityWindows
+          });
       if (availNorm.error) {
         res.status(400).json({ error: availNorm.error });
         return;
@@ -886,6 +1001,14 @@ export class ServiceController {
       const id = 'srv-' + uuidv4().slice(0, 8);
       const scheduleWarnings: string[] = [];
       let createdSchedules: any[] = [];
+      const effectiveDurationMinutes =
+        durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== ''
+          ? Number(durationMinutes)
+          : (resolvedRequiresAppointment === 0 ? 0 : 50);
+      const effectiveBufferMinutes =
+        bufferMinutes !== undefined && bufferMinutes !== null && bufferMinutes !== ''
+          ? Number(bufferMinutes)
+          : (resolvedRequiresAppointment === 0 ? 0 : 10);
 
       db.transaction(() => {
         const insertStmt = db.prepare(`
@@ -907,12 +1030,12 @@ export class ServiceController {
         insertStmt.run(
           id,
           tenantId,
-          professionalId,
+          professionalId || null,
           specialtyId || null,
           name.trim(),
           description || null,
-          durationMinutes !== undefined ? Number(durationMinutes) : 50,
-          bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
+          effectiveDurationMinutes,
+          effectiveBufferMinutes,
           effectiveCreatePrice,
           modality || 'both',
           resolvedMinLeadTimeHours,
@@ -946,17 +1069,40 @@ export class ServiceController {
           tplNorm.linkedTemplateIdsJson
         );
 
-        db.prepare('UPDATE services SET frequency_pricing_json = ?, allowed_recurrence_weekdays_json = ?, availability_mode = ? WHERE id = ? AND tenant_id = ?')
-          .run(
-            frequencyPricing ? JSON.stringify(frequencyPricing) : null,
-            isStudioCompat && resolvedDomain === 'studio' ? recNorm.allowedWeekdaysJson : null,
-            availNorm.availabilityMode,
-            id,
-            tenantId
-          );
+        db.prepare(`
+          UPDATE services
+          SET frequency_pricing_json = ?,
+              allowed_recurrence_weekdays_json = ?,
+              availability_mode = ?,
+              studio_service_type = ?,
+              requires_appointment = ?,
+              requires_active_contract = ?,
+              allow_public_booking = ?,
+              effective_start_date = ?,
+              effective_end_date = ?,
+              access_config_json = ?,
+              pricing_adjustments_json = ?,
+              commercial_price_options_json = ?
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          frequencyPricing ? JSON.stringify(frequencyPricing) : null,
+          isStudioCompat && resolvedDomain === 'studio' ? recNorm.allowedWeekdaysJson : null,
+          availNorm.availabilityMode,
+          isStudioCompat && resolvedDomain === 'studio' ? resolvedStudioType : 'individual',
+          resolvedRequiresAppointment,
+          resolvedRequiresActiveContract,
+          resolvedAllowPublicBooking,
+          resolvedEffectiveStartDate,
+          resolvedEffectiveEndDate,
+          normalizedAccessConfig ? JSON.stringify(normalizedAccessConfig) : null,
+          normalizedPricingAdjustments.length > 0 ? JSON.stringify(normalizedPricingAdjustments) : null,
+          normalizedCommercialOptions.length > 0 ? JSON.stringify(normalizedCommercialOptions) : null,
+          id,
+          tenantId
+        );
 
         if (availNorm.shouldPersistWindows) {
-          saveServiceAvailabilityWindowsTx(tenantId, id, professionalId, availNorm.windows);
+          saveServiceAvailabilityWindowsTx(tenantId, id, professionalId || null, availNorm.windows);
         }
 
         const normalizedCustomPrice = effectiveCreatePrice > 0 ? effectiveCreatePrice : (price !== undefined && price !== null && price !== '' ? Number(price) : null);
@@ -965,7 +1111,7 @@ export class ServiceController {
         validateAndSyncLinkedInstructorsTx({
           tenantId,
           serviceId: id,
-          primaryProfId: professionalId,
+          primaryProfId: professionalId || null,
           requestedIds: requestedLinkedIds,
           isStudioCompat,
           serviceDomain: resolvedDomain,
@@ -992,7 +1138,7 @@ export class ServiceController {
         }
       })();
 
-      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price: effectiveCreatePrice, professionalId, professionalName: prof.name, clinicalModule: targetModule, serviceDomain: resolvedDomain, linkedCount: requestedLinkedIds?.length || 1 });
+      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price: effectiveCreatePrice, professionalId: professionalId || null, professionalName: prof?.name || null, clinicalModule: targetModule, serviceDomain: resolvedDomain, studioServiceType: resolvedStudioType, linkedCount: requestedLinkedIds?.length || (professionalId ? 1 : 0) });
 
       const parsedCreatedRec = isStudioCompat
         ? parseServiceRecurrenceConfig({
@@ -1008,18 +1154,18 @@ export class ServiceController {
           })
         : null;
       const linkedCreatedProfs = isStudioCompat
-        ? (getLinkedProfessionalsMap(tenantId, new Map([[id, professionalId]])).get(id) || [])
+        ? (getLinkedProfessionalsMap(tenantId, new Map([[id, professionalId || null]])).get(id) || [])
         : [];
       const linkedCreatedIds = linkedCreatedProfs.length > 0
         ? linkedCreatedProfs.map(lp => lp.id)
-        : [professionalId];
+        : (professionalId ? [professionalId] : []);
       const createdDiagnostics = isStudioCompat && resolvedKind === 'group'
         ? ClassScheduleService.diagnoseServiceSchedules(tenantId, id, createdSchedules)
         : null;
-      const savedAvailWindows = isStudioCompat && resolvedDomain === 'studio' && resolvedKind === 'individual'
+      const savedAvailWindows = isStudioCompat && resolvedDomain === 'studio' && resolvedKind === 'individual' && resolvedRequiresAppointment === 1
         ? listServiceAvailabilityWindows(tenantId, id)
         : [];
-      const createdAvailDiagnostics = isStudioCompat && resolvedDomain === 'studio' && resolvedKind === 'individual' && availNorm.availabilityMode === 'custom_windows'
+      const createdAvailDiagnostics = isStudioCompat && resolvedDomain === 'studio' && resolvedKind === 'individual' && resolvedRequiresAppointment === 1 && availNorm.availabilityMode === 'custom_windows'
         ? diagnoseServiceAvailability(tenantId, linkedCreatedIds, savedAvailWindows)
         : null;
       const createdTemplatesMap = isStudioCompat ? getTenantTemplatesMap(tenantId) : new Map<string, LinkedTemplateSummary>();
@@ -1032,12 +1178,12 @@ export class ServiceController {
       res.status(201).json({
         id,
         tenant_id: tenantId,
-        professional_id: professionalId,
+        professional_id: professionalId || null,
         specialty_id: specialtyId || null,
         name: name.trim(),
         description: description || null,
-        duration_minutes: durationMinutes !== undefined ? Number(durationMinutes) : 50,
-        buffer_minutes: bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
+        duration_minutes: effectiveDurationMinutes,
+        buffer_minutes: effectiveBufferMinutes,
         min_lead_time_hours: resolvedMinLeadTimeHours,
         max_advance_days: resolvedMaxAdvanceDays,
         price: effectiveCreatePrice,
@@ -1046,6 +1192,15 @@ export class ServiceController {
         active: 1,
         clinical_module: targetModule,
         service_kind: resolvedKind,
+        studio_service_type: isStudioCompat && resolvedDomain === 'studio' ? resolvedStudioType : 'individual',
+        requires_appointment: resolvedRequiresAppointment,
+        requires_active_contract: resolvedRequiresActiveContract,
+        allow_public_booking: resolvedAllowPublicBooking,
+        effective_start_date: resolvedEffectiveStartDate,
+        effective_end_date: resolvedEffectiveEndDate,
+        access_config: normalizedAccessConfig,
+        pricing_adjustments: normalizedPricingAdjustments,
+        commercial_price_options: normalizedCommercialOptions,
         default_capacity: resolvedCapacity,
         service_domain: resolvedDomain,
         billing_mode: billNorm.billingMode,
@@ -1071,7 +1226,7 @@ export class ServiceController {
         custom_recurrence_intervals: parsedCreatedRec ? parsedCreatedRec.customIntervals : undefined,
         default_recurrence_interval: parsedCreatedRec ? parsedCreatedRec.defaultCustomInterval : null,
         modality_category: resolvedModalityCategory,
-        professional_name: prof.name,
+        professional_name: prof?.name || null,
         linked_professional_ids: linkedCreatedIds,
         linked_professionals: linkedCreatedProfs,
         class_schedules: createdSchedules,
@@ -1105,6 +1260,12 @@ export class ServiceController {
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
                pricing_rule, is_price_customized, suggested_price, weekly_sessions_count, frequency_pricing_json,
                default_template_id, linked_template_ids_json,
+               COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+               COALESCE(requires_appointment, 1) as requires_appointment,
+               COALESCE(requires_active_contract, 0) as requires_active_contract,
+               COALESCE(allow_public_booking, 1) as allow_public_booking,
+               effective_start_date, effective_end_date,
+               access_config_json, pricing_adjustments_json, commercial_price_options_json,
                COALESCE(availability_mode, 'professional_schedule') as availability_mode
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(id, tenantId) as any;
@@ -1148,6 +1309,14 @@ export class ServiceController {
       } = req.body;
 
       const rawKind = serviceKind !== undefined ? serviceKind : service_kind;
+      const rawStudioType = req.body?.studioServiceType !== undefined ? req.body.studioServiceType : req.body?.studio_service_type;
+      const rawAccessConfig = req.body?.accessConfig !== undefined ? req.body.accessConfig : req.body?.access_config;
+      const rawPricingAdjustments = req.body?.pricingAdjustments !== undefined ? req.body.pricingAdjustments : req.body?.pricing_adjustments;
+      const rawCommercialOptions = req.body?.commercialPriceOptions !== undefined ? req.body.commercialPriceOptions : req.body?.commercial_price_options;
+      const rawRequiresActiveContract = req.body?.requiresActiveContract !== undefined ? req.body.requiresActiveContract : req.body?.requires_active_contract;
+      const rawAllowPublicBooking = req.body?.allowPublicBooking !== undefined ? req.body.allowPublicBooking : req.body?.allow_public_booking;
+      const rawEffectiveStartDate = req.body?.effectiveStartDate !== undefined ? req.body.effectiveStartDate : req.body?.effective_start_date;
+      const rawEffectiveEndDate = req.body?.effectiveEndDate !== undefined ? req.body.effectiveEndDate : req.body?.effective_end_date;
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
       const rawRequestedDomain = serviceDomain ?? service_domain;
       const rawAllowedFreqs = allowedRecurrenceFrequencies !== undefined ? allowedRecurrenceFrequencies : allowed_recurrence_frequencies;
@@ -1170,11 +1339,15 @@ export class ServiceController {
       const rawAvailabilityMode = availabilityMode !== undefined ? availabilityMode : availability_mode;
       const rawAvailabilityWindows = availabilityWindows !== undefined ? availabilityWindows : availability_windows;
       const requestedLinkedIds = parseLinkedInstructorIds(req.body);
-      const effectiveTargetProfForCheck = professionalId || existing.professional_id;
+      const effectiveTargetProfForCheck = professionalId !== undefined ? (professionalId || null) : existing.professional_id;
 
       if (!isStudioCompat) {
         if (
           rawKind === 'group' ||
+          (rawStudioType !== undefined && String(rawStudioType).trim().toLowerCase() !== 'individual') ||
+          rawAccessConfig !== undefined ||
+          rawPricingAdjustments !== undefined ||
+          rawCommercialOptions !== undefined ||
           (rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') ||
           String(rawRequestedDomain || '').trim().toLowerCase() === 'studio' ||
           String(rawAvailabilityMode || '').trim().toLowerCase() === 'custom_windows' ||
@@ -1190,7 +1363,7 @@ export class ServiceController {
           (requestedLinkedIds && requestedLinkedIds.some(pid => pid !== effectiveTargetProfForCheck))
         ) {
           res.status(400).json({
-            error: 'Aulas coletivas, cobrança periódica/por pacote, múltiplos instrutores, capacidade de turma e recorrência avançada de Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
+            error: 'Aulas coletivas, planos de acesso, cobrança periódica/por pacote, múltiplos instrutores, capacidade de turma e recorrência avançada de Academia & Studio não estão disponíveis para Clínicas / Consultórios tradicionais.'
           });
           return;
         }
@@ -1198,24 +1371,36 @@ export class ServiceController {
 
       if (establishmentProfile === 'studio' && String(rawRequestedDomain || '').trim().toLowerCase() === 'clinical') {
         res.status(400).json({
-          error: 'Estabelecimentos configurados exclusivamente como Studio não criam serviços clínicos tradicionais.'
+          error: 'Estabelecimentos configurados exclusivamente como Academia & Studio não criam serviços clínicos tradicionais.'
         });
         return;
       }
 
+      const nextStudioType: StudioServiceType = !isStudioCompat
+        ? 'individual'
+        : normalizeStudioServiceType(
+            rawStudioType !== undefined ? rawStudioType : existing.studio_service_type,
+            rawKind !== undefined ? rawKind : existing.service_kind
+          );
+
       const nextKind = !isStudioCompat
         ? 'individual'
-        : (rawKind !== undefined ? (rawKind === 'group' ? 'group' : 'individual') : (existing.service_kind || 'individual'));
+        : (nextStudioType === 'group' || (rawKind !== undefined ? rawKind === 'group' : (existing.service_kind || 'individual') === 'group')
+            ? 'group'
+            : 'individual');
       let nextCapacity: number | null = !isStudioCompat ? null : (existing.default_capacity ?? null);
-      if (isStudioCompat && (rawKind !== undefined || rawCapacity !== undefined)) {
+      if (isStudioCompat && (rawKind !== undefined || rawCapacity !== undefined || rawStudioType !== undefined)) {
         if (nextKind === 'group') {
           const capNum = Number(rawCapacity !== undefined ? rawCapacity : existing.default_capacity);
           if (!Number.isInteger(capNum) || capNum < 1 || capNum > 500) {
-            res.status(400).json({ error: 'Para aulas coletivas/turmas, informe um número inteiro positivo de vagas.' });
+            res.status(400).json({ error: 'Para aulas coletivas/turmas ou duplas, informe um número inteiro positivo de vagas.' });
             return;
           }
           nextCapacity = capNum;
-        } else {
+        } else if (nextStudioType === 'facility_access' && rawCapacity !== undefined && rawCapacity !== null && rawCapacity !== '') {
+          const capNum = Number(rawCapacity);
+          nextCapacity = Number.isInteger(capNum) && capNum > 0 ? Math.min(5000, capNum) : null;
+        } else if (nextStudioType !== 'facility_access') {
           nextCapacity = null;
         }
       }
@@ -1235,8 +1420,8 @@ export class ServiceController {
       }
 
       // Validação de módulo clínico no update se fornecido
-      const targetProfId = professionalId || existing.professional_id;
-      if (clinicalModule !== undefined && clinicalModule !== null && clinicalModule !== '') {
+      const targetProfId = professionalId !== undefined ? (professionalId || null) : existing.professional_id;
+      if (targetProfId && clinicalModule !== undefined && clinicalModule !== null && clinicalModule !== '') {
         const availableModules = getAvailableModulesForProfessional(targetProfId, tenantId);
         const isAllowed = availableModules.some(m => m.code === clinicalModule);
         if (!isAllowed) {
@@ -1252,8 +1437,8 @@ export class ServiceController {
         clinicalModule: clinicalModule !== undefined ? clinicalModule : existing.clinical_module
       });
 
-      if (establishmentProfile === 'mixed' && nextDomain === 'clinical' && nextKind === 'group') {
-        res.status(400).json({ error: 'Serviços clínicos em estabelecimentos mistos devem ser individuais. Selecione o segmento Studio para criar aula coletiva / turma.' });
+      if (establishmentProfile === 'mixed' && nextDomain === 'clinical' && (nextKind === 'group' || nextStudioType !== 'individual')) {
+        res.status(400).json({ error: 'Serviços clínicos em estabelecimentos mistos devem ser individuais. Selecione o segmento Academia & Studio para criar aula coletiva, turma ou plano de acesso.' });
         return;
       }
 
@@ -1495,7 +1680,44 @@ export class ServiceController {
 
       const frequencyPricing = req.body.frequencyPricing === undefined
         ? readFrequencyPricing(existing.frequency_pricing_json)
-        : frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, nextDomain, nextBillingMode);
+        : frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, nextDomain, nextBillingMode, nextStudioType);
+
+      const nextRequiresAppt =
+        isStudioCompat && nextDomain === 'studio' && (nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled')
+          ? 0
+          : 1;
+      const nextRequiresActiveContract =
+        isStudioCompat && nextDomain === 'studio'
+          ? (rawRequiresActiveContract !== undefined ? (rawRequiresActiveContract ? 1 : 0) : Number(existing.requires_active_contract ?? (nextStudioType === 'facility_access' ? 1 : 0)))
+          : 0;
+      const nextAllowPublicBooking =
+        rawAllowPublicBooking !== undefined
+          ? (rawAllowPublicBooking === false || rawAllowPublicBooking === 0 || rawAllowPublicBooking === '0' ? 0 : 1)
+          : Number(existing.allow_public_booking ?? 1);
+      const nextEffectiveStartDate =
+        isStudioCompat && nextDomain === 'studio'
+          ? (rawEffectiveStartDate !== undefined
+              ? (rawEffectiveStartDate && /^\d{4}-\d{2}-\d{2}$/.test(String(rawEffectiveStartDate).slice(0, 10)) ? String(rawEffectiveStartDate).slice(0, 10) : null)
+              : (existing.effective_start_date || null))
+          : null;
+      const nextEffectiveEndDate =
+        isStudioCompat && nextDomain === 'studio'
+          ? (rawEffectiveEndDate !== undefined
+              ? (rawEffectiveEndDate && /^\d{4}-\d{2}-\d{2}$/.test(String(rawEffectiveEndDate).slice(0, 10)) ? String(rawEffectiveEndDate).slice(0, 10) : null)
+              : (existing.effective_end_date || null))
+          : null;
+      const nextAccessConfig =
+        isStudioCompat && nextDomain === 'studio' && nextStudioType === 'facility_access'
+          ? normalizeStudioAccessConfig(rawAccessConfig !== undefined ? rawAccessConfig : existing.access_config_json)
+          : null;
+      const nextPricingAdjustments =
+        isStudioCompat && nextDomain === 'studio'
+          ? normalizeStudioPriceAdjustments(rawPricingAdjustments !== undefined ? rawPricingAdjustments : existing.pricing_adjustments_json)
+          : [];
+      const nextCommercialOptions =
+        isStudioCompat && nextDomain === 'studio'
+          ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json)
+          : [];
 
       db.transaction(() => {
         updateStmt.run(
@@ -1547,14 +1769,37 @@ export class ServiceController {
         const nextCustomPrice = effectiveUpdatePrice > 0 ? effectiveUpdatePrice : (hasExplicitPrice ? Number(price) : null);
         const nextCustomDuration = durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== '' ? Number(durationMinutes) : null;
 
-        db.prepare('UPDATE services SET frequency_pricing_json = ?, allowed_recurrence_weekdays_json = ?, availability_mode = ? WHERE id = ? AND tenant_id = ?')
-          .run(
-            frequencyPricing ? JSON.stringify(frequencyPricing) : null,
-            isStudioCompat && nextDomain === 'studio' ? nextAllowedWeekdaysJson : null,
-            nextAvailabilityMode,
-            req.params.id,
-            tenantId
-          );
+        db.prepare(`
+          UPDATE services
+          SET frequency_pricing_json = ?,
+              allowed_recurrence_weekdays_json = ?,
+              availability_mode = ?,
+              studio_service_type = ?,
+              requires_appointment = ?,
+              requires_active_contract = ?,
+              allow_public_booking = ?,
+              effective_start_date = ?,
+              effective_end_date = ?,
+              access_config_json = ?,
+              pricing_adjustments_json = ?,
+              commercial_price_options_json = ?
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          frequencyPricing ? JSON.stringify(frequencyPricing) : null,
+          isStudioCompat && nextDomain === 'studio' ? nextAllowedWeekdaysJson : null,
+          nextAvailabilityMode,
+          isStudioCompat && nextDomain === 'studio' ? nextStudioType : 'individual',
+          nextRequiresAppt,
+          nextRequiresActiveContract,
+          nextAllowPublicBooking,
+          nextEffectiveStartDate,
+          nextEffectiveEndDate,
+          nextAccessConfig ? JSON.stringify(nextAccessConfig) : null,
+          nextPricingAdjustments.length > 0 ? JSON.stringify(nextPricingAdjustments) : null,
+          nextCommercialOptions.length > 0 ? JSON.stringify(nextCommercialOptions) : null,
+          req.params.id,
+          tenantId
+        );
 
         if (availShouldPersistWindows) {
           saveServiceAvailabilityWindowsTx(tenantId, String(id), targetProfId || null, availValidatedWindows);
@@ -1592,7 +1837,7 @@ export class ServiceController {
         }
       })();
 
-      logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name, professionalId, linkedCount: requestedLinkedIds?.length });
+      logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name, professionalId, studioServiceType: nextStudioType, linkedCount: requestedLinkedIds?.length });
       const updatedService = db.prepare(`
         SELECT s.*, COALESCE(s.service_kind, 'individual') as service_kind, COALESCE(s.allow_recurrence, 1) as allow_recurrence,
                p.name as professional_name
@@ -1624,7 +1869,8 @@ export class ServiceController {
           serviceKind: updatedService.service_kind,
           clinicalModule: updatedService.clinical_module
         }) === 'studio' &&
-        (updatedService.service_kind || 'individual') === 'individual'
+        (updatedService.service_kind || 'individual') === 'individual' &&
+        nextRequiresAppt === 1
       );
       const updAvailMode: ServiceAvailabilityMode =
         updSupportsCustomAvail && updatedService?.availability_mode === 'custom_windows'
@@ -1645,6 +1891,15 @@ export class ServiceController {
             ...updatedService,
             catalog_price: Number(updatedService.price || 0) > 0 ? Number(updatedService.price) : Number(updatedService.periodic_price || 0),
             service_kind: isStudioCompat ? (updatedService.service_kind || 'individual') : 'individual',
+            studio_service_type: isStudioCompat && updatedService.service_domain === 'studio' ? nextStudioType : 'individual',
+            requires_appointment: nextRequiresAppt,
+            requires_active_contract: nextRequiresActiveContract,
+            allow_public_booking: nextAllowPublicBooking,
+            effective_start_date: nextEffectiveStartDate,
+            effective_end_date: nextEffectiveEndDate,
+            access_config: nextAccessConfig,
+            pricing_adjustments: nextPricingAdjustments,
+            commercial_price_options: nextCommercialOptions,
             default_capacity: isStudioCompat ? updatedService.default_capacity : null,
             service_domain: resolveServiceDomain({
               establishmentProfile,
@@ -1689,6 +1944,73 @@ export class ServiceController {
     } catch (err: any) {
       console.error('[ServiceController.update] Erro:', err);
       res.status(err?.status || 500).json({ error: err?.message || 'Erro ao atualizar serviço', ...(err?.code ? { code: err.code } : {}) });
+    }
+  }
+
+  static quoteCommercial(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(401).json({ error: 'Estabelecimento não identificado.' });
+        return;
+      }
+      const serviceId = String(req.params.id || req.body?.serviceId || '').trim();
+      if (!serviceId) {
+        res.status(400).json({ error: 'Serviço obrigatório.' });
+        return;
+      }
+
+      const srv = db.prepare(`SELECT * FROM services WHERE id = ? AND tenant_id = ?`).get(serviceId, tenantId) as any;
+      if (!srv) {
+        res.status(404).json({ error: 'Serviço não encontrado neste estabelecimento.' });
+        return;
+      }
+
+      const options = normalizeCommercialPriceOptions(srv.commercial_price_options_json);
+      const adjustments = normalizeStudioPriceAdjustments(srv.pricing_adjustments_json);
+
+      const requestedOptionId = req.body?.optionId ? String(req.body.optionId).trim() : null;
+      const selectedOption = requestedOptionId
+        ? options.find(o => o.id === requestedOptionId && o.active)
+        : (options.find(o => o.active) || null);
+
+      const optionBreakdown = selectedOption
+        ? calculateCommercialOptionBreakdown(selectedOption, {
+            participantsCount: req.body?.participantsCount ? Number(req.body.participantsCount) : undefined,
+            sessionsInContract: req.body?.sessionsInContract ? Number(req.body.sessionsInContract) : undefined,
+            sessionsPerMonth: req.body?.sessionsPerMonth ? Number(req.body.sessionsPerMonth) : undefined
+          })
+        : null;
+
+      const basePrice = optionBreakdown
+        ? optionBreakdown.cycleAmountReais
+        : Number(req.body?.basePrice ?? srv.price ?? srv.periodic_price ?? 0);
+
+      const slotEval = evaluateStudioPriceAdjustments({
+        basePrice,
+        rules: adjustments,
+        weekday: req.body?.weekday !== undefined ? Number(req.body.weekday) : null,
+        timeHhmm: req.body?.timeHhmm || req.body?.startTime || null,
+        modality: req.body?.modality || null,
+        professionalId: req.body?.professionalId || null,
+        sessionType: req.body?.sessionType || null,
+        participantsCount: req.body?.participantsCount ? Number(req.body.participantsCount) : 1
+      });
+
+      res.json({
+        serviceId: srv.id,
+        serviceName: srv.name,
+        selectedOption,
+        optionBreakdown,
+        priceAdjustment: slotEval,
+        finalCycleAmountReais: slotEval.finalPrice,
+        finalTotalContractReais: optionBreakdown
+          ? Math.max(0, Math.round((optionBreakdown.totalContractAmountReais + slotEval.netAdjustment * optionBreakdown.billingCyclesCount) * 100) / 100)
+          : slotEval.finalPrice
+      });
+    } catch (err: any) {
+      console.error('[ServiceController.quoteCommercial] Erro:', err);
+      res.status(err?.status || 500).json({ error: err?.message || 'Erro ao calcular cotação comercial.' });
     }
   }
 

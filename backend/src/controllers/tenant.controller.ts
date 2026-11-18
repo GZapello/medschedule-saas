@@ -30,6 +30,12 @@ import { findNextAvailableDate } from '../utils/slot-calculator';
 import { PackageService } from '../services/package.service';
 import { ClassScheduleService, buildWeeklyScheduleSummary } from '../services/class-schedule.service';
 import { parseServiceRecurrenceConfig, resolveServiceDomain } from '../utils/establishment-context';
+import {
+  normalizeStudioServiceType,
+  normalizeStudioAccessConfig,
+  normalizeCommercialPriceOptions,
+  normalizeStudioPriceAdjustments
+} from '../utils/studio-access-and-commercial';
 
 
 
@@ -1517,6 +1523,7 @@ export class TenantController {
       `);
       const professionals = profStmt.all(resolved.id);
 
+      const isStudioCompat = PackageService.isStudioCompatible(resolved.id);
       const services = db.prepare(`
         SELECT s.id, s.name, s.description, s.specialty_id, s.modality, s.price, s.duration_minutes,
                s.professional_id, COALESCE(s.service_kind, 'individual') as service_kind,
@@ -1527,13 +1534,31 @@ export class TenantController {
                s.service_domain, s.clinical_module,
                s.billing_mode, s.periodic_price, s.pricing_rule, s.frequency_pricing_json, s.weekly_sessions_count,
                COALESCE(s.availability_mode, 'professional_schedule') as availability_mode,
-               s.modality_category, spec.name as specialty_name
+               s.modality_category, spec.name as specialty_name,
+               COALESCE(s.studio_service_type, CASE WHEN s.service_kind = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+               COALESCE(s.requires_appointment, 1) as requires_appointment,
+               COALESCE(s.requires_active_contract, 0) as requires_active_contract,
+               COALESCE(s.allow_public_booking, 1) as allow_public_booking,
+               s.effective_start_date, s.effective_end_date,
+               s.access_config_json, s.pricing_adjustments_json, s.commercial_price_options_json
         FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
-        WHERE s.tenant_id = ? AND s.active = 1 AND EXISTS (
-          SELECT 1 FROM professionals p WHERE p.tenant_id = s.tenant_id AND p.active = 1 AND p.public_booking_enabled = 1
-          AND (s.professional_id = p.id OR EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = s.id AND ps.professional_id = p.id))
+        WHERE s.tenant_id = ? AND s.active = 1 AND COALESCE(s.allow_public_booking, 1) = 1 AND (
+          EXISTS (
+            SELECT 1 FROM professionals p WHERE p.tenant_id = s.tenant_id AND p.active = 1 AND p.public_booking_enabled = 1
+            AND (
+              s.professional_id = p.id
+              OR EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = s.id AND ps.professional_id = p.id)
+              OR EXISTS (SELECT 1 FROM class_schedules cs WHERE cs.service_id = s.id AND cs.tenant_id = s.tenant_id AND cs.professional_id = p.id AND cs.active = 1)
+            )
+          )
+          OR (
+            ? = 1 AND (
+              COALESCE(s.studio_service_type, 'individual') = 'facility_access'
+              OR COALESCE(s.requires_appointment, 1) = 0
+            )
+          )
         ) ORDER BY s.name
-      `).all(resolved.id);
+      `).all(resolved.id, isStudioCompat ? 1 : 0);
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
       const publicProfessionals = (professionals as any[]).map(p => {
         const profServices = db.prepare(`
@@ -1557,7 +1582,6 @@ export class TenantController {
           next_available
         };
       });
-      const isStudioCompat = PackageService.isStudioCompatible(resolved.id);
       const establishmentProfile = tenant?.establishment_profile || 'clinic';
       const publicSchedulesByService = isStudioCompat
         ? ClassScheduleService.listByTenantGrouped(resolved.id, { includeInactive: false, publicOnly: true })
@@ -1583,17 +1607,22 @@ export class TenantController {
       const enrichedServices = (services as any[])
         .map(srv => {
           const scheds = publicSchedulesByService.get(srv.id) || [];
-          srv.frequency_pricing = isStudioCompat && resolveServiceDomain({ establishmentProfile, serviceDomain: srv.service_domain, serviceKind: srv.service_kind, clinicalModule: srv.clinical_module }) === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null;
-          delete srv.frequency_pricing_json;
           const resolvedDomain = resolveServiceDomain({
             establishmentProfile,
             serviceDomain: srv.service_domain,
             serviceKind: srv.service_kind,
             clinicalModule: srv.clinical_module
           });
+          srv.frequency_pricing = isStudioCompat && resolvedDomain === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null;
+          delete srv.frequency_pricing_json;
           if (!isStudioCompat) {
+            delete srv.access_config_json;
+            delete srv.pricing_adjustments_json;
+            delete srv.commercial_price_options_json;
             return {
               ...srv,
+              studio_service_type: 'individual',
+              requires_appointment: 1,
               service_kind: 'individual',
               default_capacity: null,
               service_domain: 'clinical',
@@ -1602,17 +1631,41 @@ export class TenantController {
               weekly_schedule_summary: []
             };
           }
+          const studioServiceType = resolvedDomain === 'studio'
+            ? normalizeStudioServiceType(srv.studio_service_type, srv.service_kind)
+            : 'individual';
+          const requiresAppointment = studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled'
+            ? 0
+            : (srv.requires_appointment === 0 || srv.requires_appointment === false ? 0 : 1);
+          const accessConfig = studioServiceType === 'facility_access'
+            ? normalizeStudioAccessConfig(srv.access_config_json)
+            : null;
+          const pricingAdjustments = resolvedDomain === 'studio'
+            ? normalizeStudioPriceAdjustments(srv.pricing_adjustments_json)
+            : [];
+          const commercialPriceOptions = resolvedDomain === 'studio'
+            ? normalizeCommercialPriceOptions(srv.commercial_price_options_json)
+            : [];
+          delete srv.access_config_json;
+          delete srv.pricing_adjustments_json;
+          delete srv.commercial_price_options_json;
+
           const recCfg = parseServiceRecurrenceConfig(srv);
-          const isGroup = (srv.service_kind || 'individual') === 'group';
+          const isGroup = (srv.service_kind || 'individual') === 'group' && requiresAppointment === 1;
           const allScheds = allSchedulesByService.get(srv.id) || [];
           const diag = isGroup
             ? ClassScheduleService.diagnoseServiceSchedules(resolved.id, srv.id, allScheds)
             : null;
-          const isPubliclyAvailable = !isGroup || Boolean(diag && diag.publishableCount > 0 && scheds.length > 0);
+          const isPubliclyAvailable = requiresAppointment === 0 || !isGroup || Boolean(diag && diag.publishableCount > 0 && scheds.length > 0);
           const linkedProfs = publicLinkedByService.get(srv.id) || [];
           return {
             ...srv,
             service_domain: resolvedDomain,
+            studio_service_type: studioServiceType,
+            requires_appointment: requiresAppointment,
+            access_config: accessConfig,
+            pricing_adjustments: pricingAdjustments,
+            commercial_price_options: commercialPriceOptions,
             allow_recurrence: recCfg.allowRecurrence ? 1 : 0,
             allowed_recurrence_frequencies: recCfg.allowedFrequencies,
             allowed_recurrence_weekdays: recCfg.allowedWeekdays,
@@ -1625,14 +1678,14 @@ export class TenantController {
             linked_professional_ids: linkedProfs.map(lp => lp.id),
             class_schedules: scheds,
             weekly_schedule_summary: buildWeeklyScheduleSummary(scheds),
-            has_public_schedules: !isGroup || scheds.length > 0,
+            has_public_schedules: requiresAppointment === 0 || !isGroup || scheds.length > 0,
             is_publicly_available: isPubliclyAvailable,
             public_booking_unavailable_reason: !isPubliclyAvailable
               ? (diag?.blockers?.[0] || 'Esta aula ainda não possui dias e horários publicados.')
               : null
           };
         })
-        .filter(srv => !isStudioCompat || srv.service_kind !== 'group' || srv.is_publicly_available);
+        .filter(srv => !isStudioCompat || srv.requires_appointment === 0 || srv.service_kind !== 'group' || srv.is_publicly_available);
       const rawPackages = isStudioCompat
         ? PackageService.listCatalogPackages(resolved.id, { publicOnly: true })
         : [];

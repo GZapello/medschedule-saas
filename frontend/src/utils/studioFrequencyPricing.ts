@@ -25,7 +25,7 @@ export function normalizeFrequencyPricing(raw: unknown): FrequencyPricing | null
     if (!entries || typeof entries !== 'object' || Array.isArray(entries)) throw new Error('Valores por frequência inválidos.');
     const table: Record<string, number> = {};
     for (const [frequency, cents] of Object.entries(entries)) {
-      if (!/^[1-9]\d*$/.test(frequency) || !Number.isSafeInteger(Number(frequency))) throw new Error('Frequência semanal inválida.');
+      if (frequency !== 'unlimited' && (!/^[1-9]\d*$/.test(frequency) || !Number.isSafeInteger(Number(frequency)))) throw new Error('Frequência semanal inválida.');
       if (typeof cents !== 'number' || !Number.isSafeInteger(cents) || cents <= 0) throw new Error('Informe preços positivos em centavos inteiros.');
       table[frequency] = cents;
     }
@@ -38,7 +38,7 @@ export function readFrequencyPricing(raw: unknown): FrequencyPricing | null {
   try { return normalizeFrequencyPricing(typeof raw === 'string' ? JSON.parse(raw) : raw); } catch { return null; }
 }
 
-export function frequencyPriceCents(config: FrequencyPricing | null | undefined, billingMode: unknown, weeklyCount: number): number | undefined {
+export function frequencyPriceCents(config: FrequencyPricing | null | undefined, billingMode: unknown, weeklyCount: number | 'unlimited'): number | undefined {
   if (!config?.enabled || !supportsFrequencyPricing(billingMode)) return undefined;
   return config.tables[config.unit === 'per_session' ? 'per_session' : billingMode]?.[String(weeklyCount)];
 }

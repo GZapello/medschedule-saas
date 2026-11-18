@@ -143,7 +143,7 @@ export class PayrollController {
             isExemptOrCancelled: false
           };
         }
-        const cacheKey = `${contractId}:${periodMonth}`;
+        const cacheKey = `${contractId}:${row.service_id || 'any'}:${periodMonth}`;
         const cached = contractUnitCache.get(cacheKey);
         if (cached) return cached;
 
@@ -152,10 +152,21 @@ export class PayrollController {
         const entSumRow = db.prepare(`
           SELECT COALESCE(SUM(credits_total), 0) as total
           FROM student_package_entitlements
-          WHERE contract_id = ? AND tenant_id = ?
+          WHERE contract_id = ? AND tenant_id = ? AND COALESCE(entitlement_type, 'scheduled_service') = 'scheduled_service'
         `).get(contractId, tenantId) as { total: number } | undefined;
         const entTotal = Number(entSumRow?.total || 0);
         const creditDenom = totalCredSnap > 0 ? totalCredSnap : entTotal;
+
+        const discriminatedItem = row.service_id
+          ? (db.prepare(`
+              SELECT spi.item_price, spi.quantity
+              FROM student_package_contracts spc
+              JOIN service_package_items spi ON spi.package_id = spc.package_id AND spi.tenant_id = spc.tenant_id
+              WHERE spc.id = ? AND spc.tenant_id = ? AND spi.service_id = ?
+                AND spi.item_price IS NOT NULL AND spi.item_price > 0 AND spi.quantity > 0
+              LIMIT 1
+            `).get(contractId, tenantId, row.service_id) as { item_price: number; quantity: number } | undefined)
+          : undefined;
 
         let out: { unitValue: number; note: string; isExemptOrCancelled: boolean };
         if (row.pkg_contract_status === 'cancelled' || row.pkg_payment_status === 'exempt') {
@@ -163,6 +174,13 @@ export class PayrollController {
             unitValue: 0,
             note: 'Pacote isento/cancelado (base R$ 0,00)',
             isExemptOrCancelled: true
+          };
+        } else if (discriminatedItem) {
+          const unitValue = Math.max(0, Math.round((Number(discriminatedItem.item_price) / Number(discriminatedItem.quantity)) * 100) / 100);
+          out = {
+            unitValue,
+            note: `Pacote "${row.pkg_name || 'Combinado'}" (item discriminado R$ ${Number(discriminatedItem.item_price).toFixed(2)} / ${discriminatedItem.quantity} créditos)`,
+            isExemptOrCancelled: false
           };
         } else if (creditDenom > 0) {
           const unitValue = Math.max(0, Math.round((contractPrice / creditDenom) * 100) / 100);

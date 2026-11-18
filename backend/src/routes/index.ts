@@ -78,6 +78,7 @@ import { EsteticController } from '../controllers/estetic.controller';
 import { ServiceReminderController } from '../controllers/service-reminder.controller';
 import { PackageController } from '../controllers/package.controller';
 import { StudentConsumptionController } from '../controllers/student-consumption.controller';
+import { StudioAccessController } from '../controllers/studio-access.controller';
 
 import { authMiddleware, onboardingGate, whatsappUpdateAuthMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -367,6 +368,8 @@ api.delete('/v1/professionals/:id/service-commissions/:serviceId', requireTenant
 // Serviços e Salas
 api.get('/v1/services', requireTenant, ServiceController.list);
 api.post('/v1/services/frequency-meetings', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.frequencyMeetings);
+api.post('/v1/services/quote-commercial', requireTenant, ServiceController.quoteCommercial);
+api.post('/v1/services/:id/quote-commercial', requireTenant, ServiceController.quoteCommercial);
 api.post('/v1/services', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.create);
 api.put('/v1/services/:id', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.update);
 api.delete('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.delete);
@@ -389,6 +392,20 @@ api.post('/v1/package-contracts', requireTenant, requireStudioEstablishment, req
 api.get('/v1/package-contracts/:id', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.getContract);
 api.patch('/v1/package-contracts/:id/status', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist'), PackageController.updateContractStatus);
 api.get('/v1/patients/:patientId/packages', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'receptionist', 'professional'), PackageController.listStudentContracts);
+
+// Matrículas, Planos de Acesso & Controle de Acesso (Academia & Studio)
+api.get('/v1/studio/enrollments', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['view_enrollments', 'manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.listEnrollments);
+api.post('/v1/studio/enrollments', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.createEnrollment);
+api.post('/v1/studio/enrollments/:id/lifecycle', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.updateEnrollmentLifecycle);
+api.get('/v1/studio/enrollments/:id/history', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['view_enrollments', 'manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.getContractHistory);
+api.post('/v1/studio/enrollments/:contractId/entitlements/:entitlementId/deliver', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'register_access', 'view_attendance'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.deliverEntitlement);
+
+api.get('/v1/studio/access/logs', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'view_attendance', 'view_enrollments'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.listAccessLogs);
+api.post('/v1/studio/access/check-in', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'manage_contracts'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.checkIn);
+api.post('/v1/studio/access/:logId/check-out', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'manage_contracts'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.checkOut);
+api.patch('/v1/studio/access/:logId/correct', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['correct_access_logs', 'manage_contracts'], 'clinic_admin'), StudioAccessController.correctAccessLog);
+api.get('/v1/studio/access/students/:studentId/qr-token', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'view_enrollments', 'manage_contracts'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.getStudentQrToken);
+api.post('/v1/studio/access/verify-qr', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['register_access', 'view_enrollments', 'manage_contracts'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.verifyQrToken);
 
 // Lembretes de Contato / Retorno por Serviço
 api.get('/v1/service-reminders', requireTenant, ServiceReminderController.list);

@@ -637,9 +637,16 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     setPkgSelectedItems([]);
   }, [selectedPackageId, selectedPackage]);
 
+  const isSelectedServiceAccessPlan = Boolean(
+    selectedService &&
+    (selectedService.studio_service_type === 'facility_access' ||
+      selectedService.studio_service_type === 'non_scheduled' ||
+      Number(selectedService.requires_appointment ?? 1) === 0)
+  );
+
   // Busca horários e grade semanal para Serviço avulso / Turma
   useEffect(() => {
-    if (objective !== 'service' || step < 3 || step > 4 || !selectedServiceId) return;
+    if (objective !== 'service' || step < 3 || step > 4 || !selectedServiceId || isSelectedServiceAccessPlan) return;
     let cancelled = false;
     setLoadingSlots(true);
     setEmptyReason('');
@@ -705,6 +712,23 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   // Busca horários e grade para modalidade dentro de Pacote
   useEffect(() => {
     if (objective !== 'package' || step !== 3 || !activePkgServiceId) return;
+    const activePkgItem = selectedPackage?.items?.find((i: any) => i.service_id === activePkgServiceId);
+    const activeSrvObj = services.find(s => s.id === activePkgServiceId);
+    if (
+      activePkgItem?.item_type === 'facility_access' ||
+      activePkgItem?.item_type === 'deliverable' ||
+      activePkgItem?.requires_appointment === 0 ||
+      activeSrvObj?.studio_service_type === 'facility_access' ||
+      activeSrvObj?.studio_service_type === 'non_scheduled' ||
+      Number(activeSrvObj?.requires_appointment ?? 1) === 0
+    ) {
+      setPkgSlots([]);
+      setPkgUpcomingSlots([]);
+      setPkgWeeklySummary([]);
+      setPkgEmptyReason('Este benefício do pacote (Acesso Livre/Limitado ou Entregável) não exige agendamento de horário.');
+      setPkgSlotsLoading(false);
+      return;
+    }
     let cancelled = false;
     setPkgSlotsLoading(true);
     setPkgEmptyReason('');
@@ -905,6 +929,26 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 notes: studentForm.notes.trim() || null
               }
             }
+          : isSelectedServiceAccessPlan
+          ? {
+              tenantSlug: tenantSlug || clinic?.slug,
+              bookingSequence,
+              bookingIntent: 'access_plan',
+              mode: 'access_plan',
+              serviceId: selectedServiceId,
+              startDate: planStartDate || todayIso(),
+              contractDurationCode: recurrenceDurationCode || '1_month',
+              accessMode: selectedService?.access_config?.accessMode || 'unlimited',
+              weeklyLimit: selectedService?.access_config?.maxEntriesPerWeek || null,
+              monthlyLimit: selectedService?.access_config?.maxEntriesPerMonth || null,
+              student: {
+                fullName: studentForm.fullName.trim(),
+                phone: studentForm.phone.trim(),
+                whatsapp: studentForm.whatsapp.trim() || studentForm.phone.trim(),
+                email: studentForm.email.trim() || null,
+                notes: studentForm.notes.trim() || null
+              }
+            }
           : (() => {
               const targetSlot = useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot;
               return {
@@ -1092,9 +1136,9 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center group-hover:bg-teal-700 group-hover:text-white transition-colors">
                 <Calendar className="w-5 h-5" />
               </div>
-              <div className="font-bold text-base text-slate-900">Agendar uma aula</div>
+              <div className="font-bold text-base text-slate-900">Contratar plano ou agendar aula</div>
               <p className="text-xs text-slate-500">
-                Veja modalidades, turmas coletivas com vagas em tempo real, instrutores e horários disponíveis.
+                Contrate planos de acesso à academia (sem hora marcada) ou agende aulas individuais, duplas e turmas coletivas.
               </p>
               <span className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 pt-1">
                 Ver modalidades <ArrowRight className="w-3.5 h-3.5" />
@@ -1199,10 +1243,16 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                     </div>
                     {s.description && <p className="text-xs text-slate-500 line-clamp-2">{s.description}</p>}
                     <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
-                        <Clock className="w-3 h-3 inline mr-1" />
-                        {s.duration_minutes || 50} min
-                      </span>
+                      {s.studio_service_type === 'facility_access' || Number(s.requires_appointment ?? 1) === 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 font-bold">
+                          Plano de Acesso • Sem hora marcada
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
+                          <Clock className="w-3 h-3 inline mr-1" />
+                          {s.duration_minutes || 50} min
+                        </span>
+                      )}
                       {s.service_kind === 'group' && (
                         <span className="px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-bold">
                           <Users className="w-3 h-3 inline mr-1" />
@@ -1304,8 +1354,76 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
         </div>
       )}
 
+      {/* ETAPA 3 (MODO PLANO DE ACESSO SEM HORÁRIO): VIGÊNCIA E REGRAS */}
+      {step === 3 && objective === 'service' && selectedService && isSelectedServiceAccessPlan && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <BookingBackButton onClick={() => setStep(2)} />
+            <span className="text-xs font-bold text-slate-700">{selectedService.name}</span>
+          </div>
+
+          <div className="p-4 sm:p-5 rounded-2xl border border-indigo-200 bg-indigo-50/40 space-y-4 text-xs">
+            <div>
+              <h3 className="font-bold text-base text-slate-900">Contratação de Plano de Acesso (Sem Hora Marcada)</h3>
+              <p className="text-slate-600 mt-1">
+                Este plano permite frequentar o estabelecimento dentro dos dias e horários autorizados, sem precisar reservar horário na agenda.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Data de início desejada *</label>
+                <input
+                  type="date"
+                  min={todayIso()}
+                  value={planStartDate}
+                  onChange={e => setPlanStartDate(e.target.value || todayIso())}
+                  className={bookingInput}
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Duração do contrato *</label>
+                <select
+                  value={recurrenceDurationCode}
+                  onChange={e => setRecurrenceDurationCode(e.target.value as any)}
+                  className={bookingInput}
+                >
+                  {(selectedServiceRecurrence.allowedPlanDurations || ['1_month', '3_months', '6_months', '12_months'])
+                    .filter(d => d !== 'count' && d !== 'custom_date')
+                    .map(dur => (
+                      <option key={dur} value={dur}>
+                        {PLAN_DURATION_LABELS[dur as PlanDurationCode] || dur}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-1 text-slate-700">
+              <div>
+                <strong>Modalidade de acesso:</strong>{' '}
+                {selectedService.access_config?.accessMode === 'limited'
+                  ? `Acesso Limitado (${selectedService.access_config?.maxEntriesPerWeek || selectedService.access_config?.maxEntriesPerMonth || 3}x)`
+                  : 'Acesso Livre durante a vigência'}
+              </div>
+              <div>
+                <strong>Valor de referência:</strong>{' '}
+                {formatMoney(Number(selectedService.periodic_price) > 0 ? selectedService.periodic_price : selectedService.price)}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button type="button" onClick={() => setStep(4)} className={bookingButton}>
+              Continuar <ArrowRight className="w-4 h-4 inline ml-1" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ETAPA 3: DIAS, HORÁRIOS, VAGAS & INSTRUTOR */}
-      {step === 3 && objective === 'service' && selectedService && (
+      {step === 3 && objective === 'service' && selectedService && !isSelectedServiceAccessPlan && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <BookingBackButton onClick={() => setStep(2)} />
@@ -2294,6 +2412,25 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 ) : (
                   <p className="text-slate-500">Sem horários pré-reservados agora — você poderá agendar após confirmação.</p>
                 )}
+              </div>
+            ) : selectedService && isSelectedServiceAccessPlan ? (
+              <div className="space-y-2">
+                <div className="flex justify-between font-bold text-sm text-slate-900">
+                  <span>{selectedService.name}</span>
+                  <span className="text-teal-700">
+                    {formatMoney(Number(selectedService.periodic_price) > 0 ? selectedService.periodic_price : selectedService.price)}
+                  </span>
+                </div>
+                <p className="text-slate-700">
+                  <strong>Tipo:</strong> Plano de Acesso ao Estabelecimento ({selectedService.access_config?.accessMode === 'limited' ? `Limitado ${selectedService.access_config?.maxEntriesPerWeek || 3}x` : 'Acesso Livre'})
+                </p>
+                <p className="text-slate-700">
+                  <strong>Início solicitado:</strong> {planStartDate || todayIso()} •{' '}
+                  <strong>Vigência:</strong> {PLAN_DURATION_LABELS[recurrenceDurationCode] || 'Mensal'}
+                </p>
+                <p className="text-slate-500 text-[11px]">
+                  Sua matrícula ficará pendente até a aprovação do estabelecimento. Não ocupa horários da agenda de instrutores.
+                </p>
               </div>
             ) : selectedService && (useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot) ? (() => {
               const displayAnchor = useRecurrence ? effectiveRecurrenceAnchorSlot : selectedSlot;

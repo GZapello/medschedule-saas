@@ -20,7 +20,9 @@ import {
   resolveOrCreateGroupOccurrenceTx,
   SchedulePlanEntryInput
 } from './class-group.service';
-import { ClassScheduleService, getDayOfWeekFromYmd } from './class-schedule.service';
+import { ClassScheduleService, getDayOfWeekFromYmd, todayBrazilYmd } from './class-schedule.service';
+import { StudioAccessService } from './studio-access.service';
+import { normalizeStudioAccessConfig } from '../utils/studio-access-and-commercial';
 import { resolveConcreteModality, sanitizeBookingErrorMessage } from '../utils/modality-resolver';
 import {
   resolveBookingTenant,
@@ -806,24 +808,28 @@ export class PublicBookingRequestService {
       const firstPreview = previewAppointments[0];
       const uniqueTimes = Array.from(new Set(expandedSlots.map(s => formatTimeRange(s.startIso, s.endIso)).filter(Boolean)));
       const timeRangeLabel = uniqueTimes.length <= 2 ? uniqueTimes.join(' • ') : `${uniqueTimes[0]} (+${uniqueTimes.length - 1})`;
-      const startDateIso = firstPreview?.startTime || null;
+      const startDateIso = firstPreview?.startTime || (rawBody?.startDate ? String(rawBody.startDate).slice(0, 10) : todayBrazilYmd());
       const startDateLabel = startDateIso ? formatDateBr(startDateIso.slice(0, 10)) : null;
       const uniqueProfNames = Array.from(new Set(previewAppointments.map(p => p.professionalName).filter(Boolean))).join(', ');
       const modalityValue = firstPreview?.modality || 'presential';
-      const sessionsCount = expandedSlots.length || 1;
-      const summary = `${fullName} solicitou o pacote ${pkg.name} (${sessionsCount} ${sessionsCount === 1 ? 'aula' : 'aulas'})`;
+      const sessionsCount = expandedSlots.length;
+      const summary = sessionsCount > 0
+        ? `${fullName} solicitou o pacote ${pkg.name} (${sessionsCount} ${sessionsCount === 1 ? 'aula' : 'aulas'})`
+        : `${fullName} solicitou a contratação do pacote ${pkg.name}`;
 
       const payload = {
         type: 'studio_package',
         tenantId: tenant.id,
         mode: 'package',
         packageId: pkg.id,
+        startDate: startDateIso.slice(0, 10),
         schedules: rawSchedules,
         student: {
           fullName,
           phone: normalizedPhone,
           whatsapp: normalizedWhatsapp,
           email,
+          cpf: student?.cpf ? String(student.cpf).trim() : null,
           notes: studentNotes
         }
       };
@@ -842,7 +848,7 @@ export class PublicBookingRequestService {
           tenant.id,
           pkg.id,
           modalityValue,
-          firstPreview?.startTime || null,
+          firstPreview?.startTime || startDateIso,
           firstPreview?.endTime || null,
           weekdaysLabel,
           timeRangeLabel || null,
@@ -865,7 +871,7 @@ export class PublicBookingRequestService {
           requestId,
           establishmentMode: 'studio',
           professionalIds: Array.from(profIdSet),
-          title: 'Nova solicitação de agendamento',
+          title: 'Nova solicitação de pacote',
           summary,
           studentOrPatientName: fullName,
           serviceOrClassName: pkg.name,
@@ -874,7 +880,7 @@ export class PublicBookingRequestService {
           startDateLabel,
           startDateIso,
           professionalNames: uniqueProfNames || null,
-          classGroupLabel: sessionsCount > 0 ? `Pacote • ${sessionsCount} ${sessionsCount === 1 ? 'sessão' : 'sessões'}` : 'Pacote Studio',
+          classGroupLabel: sessionsCount > 0 ? `Pacote • ${sessionsCount} ${sessionsCount === 1 ? 'sessão' : 'sessões'}` : 'Pacote Combinado / Acesso',
           sessionsCount,
           whatsappPhone: validWhatsapp,
           establishmentName,
@@ -910,7 +916,188 @@ export class PublicBookingRequestService {
           modality: modalityValue,
           sessionsCount
         },
-        message: 'Solicitação de pacote recebida! Aguarde a confirmação do estabelecimento antes de considerar os horários reservados.'
+        message: 'Solicitação de pacote recebida! Aguarde a confirmação do estabelecimento antes de considerar a matrícula ativa.'
+      };
+    }
+
+    // ---------------------------------------------------------------------
+    // MODO PLANO DE ACESSO (Sem agendamento de horário — Tipo A)
+    // ---------------------------------------------------------------------
+    const targetSrvRow = serviceId
+      ? (db.prepare(`
+          SELECT id, name, price, periodic_price, billing_mode, default_billing_due_day,
+                 COALESCE(studio_service_type, 'individual') as studio_service_type,
+                 COALESCE(requires_appointment, 1) as requires_appointment,
+                 COALESCE(allow_public_booking, 1) as allow_public_booking,
+                 default_plan_duration, access_config_json, frequency_pricing_json, commercial_price_options_json
+          FROM services WHERE id = ? AND tenant_id = ? AND active = 1
+        `).get(String(serviceId), tenant.id) as any)
+      : null;
+
+    if (
+      mode === 'access_plan' ||
+      bookingIntent === 'access_plan' ||
+      (targetSrvRow && (targetSrvRow.studio_service_type === 'facility_access' || Number(targetSrvRow.requires_appointment) === 0))
+    ) {
+      if (!targetSrvRow || Number(targetSrvRow.allow_public_booking ?? 1) === 0) {
+        throw Object.assign(new Error('Plano de acesso indisponível para contratação online.'), { status: 404 });
+      }
+
+      const requestedStartDate = rawBody?.startDate && validBookingDate(rawBody.startDate)
+        ? String(rawBody.startDate).slice(0, 10)
+        : todayBrazilYmd();
+      const contractDurationCode = String(
+        rawBody?.contractDurationCode || rawBody?.planDurationCode || recurrence?.durationCode || targetSrvRow.default_plan_duration || 'monthly'
+      );
+      const paymentPeriodicity = String(rawBody?.paymentPeriodicity || 'monthly');
+      const accCfg = normalizeStudioAccessConfig(targetSrvRow.access_config_json);
+      const requestedAccessMode = rawBody?.accessMode === 'limited' || rawBody?.accessMode === 'unlimited'
+        ? rawBody.accessMode
+        : accCfg.accessMode;
+      const requestedWeeklyLimit = rawBody?.weeklyLimit !== undefined && rawBody?.weeklyLimit !== null
+        ? Number(rawBody.weeklyLimit)
+        : (requestedAccessMode === 'limited' ? accCfg.maxEntriesPerWeek : null);
+      const requestedMonthlyLimit = rawBody?.monthlyLimit !== undefined && rawBody?.monthlyLimit !== null
+        ? Number(rawBody.monthlyLimit)
+        : (requestedAccessMode === 'limited' ? accCfg.maxEntriesPerMonth : null);
+
+      if (checkDuplicatePendingRequest({
+        tenantId: tenant.id,
+        phoneTail,
+        serviceId: targetSrvRow.id,
+        startTime: requestedStartDate
+      })) {
+        throw Object.assign(
+          new Error('Você já possui uma solicitação pendente para este plano de acesso. Aguarde a confirmação do estabelecimento.'),
+          { status: 409, code: 'DUPLICATE_PENDING_REQUEST' }
+        );
+      }
+
+      const requestId = 'pbr-' + uuidv4().slice(0, 8);
+      const requestNumber = generateRequestNumber(tenant.id);
+      const startDateLabel = formatDateBr(requestedStartDate);
+      const planDurationLabel = formatPlanDurationLabelPt(contractDurationCode, recurrence) || 'Mensal';
+      const accessLabel = requestedAccessMode === 'limited'
+        ? (requestedWeeklyLimit ? `${requestedWeeklyLimit}x/semana` : (requestedMonthlyLimit ? `${requestedMonthlyLimit}x/mês` : 'Acesso limitado'))
+        : 'Acesso livre';
+      const timeWindowLabel = accCfg.allowedTimeWindows.length > 0
+        ? accCfg.allowedTimeWindows.map(w => `${w.startTime} às ${w.endTime}`).join(', ')
+        : 'Horário de funcionamento';
+      const summary = `${fullName} solicitou matrícula no plano ${targetSrvRow.name} (${accessLabel} • ${planDurationLabel}) a partir de ${startDateLabel}`;
+
+      const payload = {
+        type: 'studio_access_plan',
+        tenantId: tenant.id,
+        mode: 'access_plan',
+        bookingIntent: 'access_plan',
+        serviceId: targetSrvRow.id,
+        startDate: requestedStartDate,
+        contractDurationCode,
+        paymentPeriodicity,
+        accessMode: requestedAccessMode,
+        weeklyLimit: requestedWeeklyLimit,
+        monthlyLimit: requestedMonthlyLimit,
+        amount: rawBody?.amount !== undefined ? Number(rawBody.amount) : undefined,
+        student: {
+          fullName,
+          phone: normalizedPhone,
+          whatsapp: normalizedWhatsapp,
+          email,
+          cpf: student?.cpf ? String(student.cpf).trim() : null,
+          notes: studentNotes
+        }
+      };
+
+      db.transaction(() => {
+        db.prepare(`
+          INSERT INTO public_booking_requests (
+            id, request_number, tenant_id, establishment_mode, mode, status,
+            service_id, modality, start_time, booking_intent,
+            weekdays_label, time_range_label, start_date_label, start_date_iso,
+            plan_duration_label, weekly_frequency, sessions_count,
+            patient_snapshot_json, payload_json, summary_snapshot_json
+          ) VALUES (?, ?, ?, 'studio', 'access_plan', 'awaiting_confirmation', ?, 'presential', ?, 'access_plan', ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+        `).run(
+          requestId,
+          requestNumber,
+          tenant.id,
+          targetSrvRow.id,
+          requestedStartDate,
+          accessLabel,
+          timeWindowLabel,
+          startDateLabel,
+          requestedStartDate,
+          planDurationLabel,
+          requestedWeeklyLimit || null,
+          JSON.stringify(payload.student),
+          JSON.stringify(payload),
+          JSON.stringify({
+            serviceName: targetSrvRow.name,
+            professionalNames: '',
+            modality: 'presential',
+            establishmentName,
+            planDurationLabel,
+            weeklyFrequency: requestedWeeklyLimit || null,
+            accessLabel
+          })
+        );
+
+        InternalNotificationService.notifyPublicBookingRequestPending({
+          tenantId: tenant.id,
+          requestId,
+          establishmentMode: 'studio',
+          professionalIds: [],
+          title: 'Nova solicitação de plano de acesso',
+          summary,
+          studentOrPatientName: fullName,
+          serviceOrClassName: targetSrvRow.name,
+          weekdaysLabel: accessLabel,
+          timeRangeLabel: timeWindowLabel,
+          startDateLabel,
+          startDateIso: requestedStartDate,
+          professionalNames: null,
+          classGroupLabel: `Plano de Acesso • ${accessLabel}`,
+          sessionsCount: 0,
+          whatsappPhone: validWhatsapp,
+          establishmentName,
+          modality: 'presential',
+          planDurationLabel,
+          weeklyFrequency: requestedWeeklyLimit || null,
+          metadata: {
+            requestId,
+            requestNumber,
+            requestStatus: 'awaiting_confirmation',
+            establishmentName,
+            modality: 'presential',
+            planDurationLabel,
+            weeklyFrequency: requestedWeeklyLimit || null,
+            accessLabel,
+            whatsappPhone: validWhatsapp
+          }
+        });
+      })();
+
+      return {
+        mode: 'access_plan',
+        id: requestId,
+        requestId,
+        requestNumber,
+        status: 'awaiting_confirmation',
+        requiresConfirmation: true,
+        paymentPending: false,
+        appointments: [],
+        requestedSummary: {
+          serviceName: targetSrvRow.name,
+          professionalNames: '',
+          weekdaysLabel: accessLabel,
+          timeRangeLabel: timeWindowLabel,
+          startDateLabel,
+          weeklyFrequency: requestedWeeklyLimit || null,
+          planDurationLabel,
+          modality: 'presential',
+          sessionsCount: 0
+        },
+        message: 'Solicitação de matrícula recebida! Aguarde a confirmação do estabelecimento para ativar seu acesso.'
       };
     }
 
@@ -1578,25 +1765,87 @@ export class PublicBookingRequestService {
       }
 
       // =====================================================================
-      // FLUXO 2: STUDIO PACOTE
+      // FLUXO 2: STUDIO PACOTE / PLANO DE ACESSO
       // =====================================================================
       const resolveOrCreateStudioStudentTx = (): string => {
         const student = payload.student || {};
         const phone = String(student.phone || '');
         const whatsapp = String(student.whatsapp || phone);
+        const cpf = student.cpf ? String(student.cpf).trim() : null;
         const existingId = findExistingPatientByContactReadOnly(tenantId, phone, student.email);
         if (existingId) {
-          db.prepare(`UPDATE patients SET whatsapp = COALESCE(whatsapp, ?), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
-            .run(whatsapp, existingId, tenantId);
+          db.prepare(`
+            UPDATE patients
+            SET whatsapp = COALESCE(whatsapp, ?),
+                cpf = COALESCE(cpf, ?),
+                updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ?
+          `).run(whatsapp, cpf, existingId, tenantId);
           return existingId;
         }
         const newId = 'pat-' + uuidv4().slice(0, 8);
         db.prepare(`
-          INSERT INTO patients (id, tenant_id, full_name, phone, whatsapp, email, notes_admin, active)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-        `).run(newId, tenantId, student.fullName, phone, whatsapp, student.email || null, student.notes || null);
+          INSERT INTO patients (id, tenant_id, full_name, phone, whatsapp, email, cpf, notes_admin, active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(newId, tenantId, student.fullName, phone, whatsapp, student.email || null, cpf, student.notes || null);
         return newId;
       };
+
+      if (requestRow.mode === 'access_plan' || payload.type === 'studio_access_plan') {
+        const resolvedStudentId = resolveOrCreateStudioStudentTx();
+        const enrollment = StudioAccessService.createEnrollmentTx({
+          tenantId,
+          studentId: resolvedStudentId,
+          serviceId: String(payload.serviceId || requestRow.service_id),
+          contractKind: 'access_plan',
+          contractDurationCode: payload.contractDurationCode || '1_month',
+          paymentPeriodicity: payload.paymentPeriodicity || 'monthly',
+          startDate: payload.startDate || todayBrazilYmd(),
+          paymentMethod: 'pix',
+          initialPaymentStatus: 'pending',
+          contractStatus: 'active',
+          amount: payload.amount !== undefined ? Number(payload.amount) : undefined,
+          maxEntriesPerWeek: payload.weeklyLimit !== undefined ? payload.weeklyLimit : null,
+          maxEntriesPerMonth: payload.monthlyLimit !== undefined ? payload.monthlyLimit : null,
+          accessMode: payload.accessMode || undefined,
+          origin: 'admin',
+          notes: payload.student?.notes || 'Plano de acesso contratado via link público e confirmado pelo estabelecimento',
+          generateInitialCharge: true,
+          createdBy: userId
+        });
+
+        db.prepare(`
+          UPDATE public_booking_requests
+          SET status = 'confirmed',
+              patient_id = ?,
+              confirmed_billing_plan_id = ?,
+              confirmed_by_user_id = ?,
+              confirmed_at = ?,
+              conflict_reason = NULL,
+              updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(resolvedStudentId, enrollment.contractId, userId, confirmedAtIso, requestRow.id, tenantId);
+
+        InternalNotificationService.markRequestConfirmedNotificationsTx({
+          tenantId,
+          requestId: requestRow.id,
+          confirmedByUserId: userId,
+          confirmedAtIso,
+          expiresAtIso,
+          appointmentId: null,
+          occurrenceId: null
+        });
+
+        return {
+          appointmentId: null,
+          appointmentIds: [],
+          seriesId: null,
+          contractId: null,
+          billingPlanId: enrollment.contractId,
+          confirmedAtIso,
+          expiresAtIso
+        };
+      }
 
       if (requestRow.mode === 'package') {
         const pkg = PackageService.listCatalogPackages(tenantId, { includeInactive: false, publicOnly: true })

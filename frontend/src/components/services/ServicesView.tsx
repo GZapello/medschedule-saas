@@ -34,6 +34,16 @@ import { StudioPricingRule } from '../../utils/studioPricing';
 import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
 import { ServiceFormBody, ServiceFormSection, StudioServiceIndicators, StudioServicePresentation } from './StudioServicePresentation';
+import { StudioAccessAndAdjustmentsPanel } from './StudioAccessAndAdjustmentsPanel';
+import {
+  DEFAULT_STUDIO_ACCESS_CONFIG,
+  normalizeStudioAccessConfig,
+  normalizeStudioPriceAdjustments,
+  normalizeStudioServiceType,
+  StudioAccessConfig,
+  StudioPriceAdjustmentRule,
+  StudioServiceType
+} from '../../utils/studioAccessAndCommercial';
 import {
   ALL_PLAN_DURATIONS,
   formatCurrencyBRL,
@@ -363,6 +373,10 @@ export const ServicesView: React.FC = () => {
   const [modality, setModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
   const [serviceDomain, setServiceDomain] = useState<ServiceDomain>(isPureStudio ? 'studio' : 'clinical');
   const [serviceKind, setServiceKind] = useState<'individual' | 'group'>('individual');
+  const [studioServiceType, setStudioServiceType] = useState<StudioServiceType>('individual');
+  const [accessConfig, setAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
+  const [pricingAdjustments, setPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
+  const [allowPublicBooking, setAllowPublicBooking] = useState<boolean>(true);
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [allowedFrequencies, setAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
@@ -406,6 +420,10 @@ export const ServicesView: React.FC = () => {
   const [editModality, setEditModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
   const [editServiceDomain, setEditServiceDomain] = useState<ServiceDomain>(isPureStudio ? 'studio' : 'clinical');
   const [editServiceKind, setEditServiceKind] = useState<'individual' | 'group'>('individual');
+  const [editStudioServiceType, setEditStudioServiceType] = useState<StudioServiceType>('individual');
+  const [editAccessConfig, setEditAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
+  const [editPricingAdjustments, setEditPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
+  const [editAllowPublicBooking, setEditAllowPublicBooking] = useState<boolean>(true);
   const [editDefaultCapacity, setEditDefaultCapacity] = useState<number>(10);
   const [editAllowRecurrence, setEditAllowRecurrence] = useState<boolean>(true);
   const [editAllowedFrequencies, setEditAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
@@ -688,16 +706,17 @@ export const ServicesView: React.FC = () => {
       }
     }
 
-    if (!professionalId) {
+    const createRequiresAppointment = !showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled');
+    if (!professionalId && createRequiresAppointment) {
       showToast('Selecione o profissional responsável pelo serviço', 'error');
       return;
     }
 
-    if (showCreateStudioConfig && serviceKind === 'group' && hasPendingCreateScheduleForm) {
+    if (showCreateStudioConfig && studioServiceType === 'group' && serviceKind === 'group' && hasPendingCreateScheduleForm) {
       showToast('Confirme ou cancele o horário aberto na grade semanal antes de salvar a aula.', 'error');
       return;
     }
-    if (showCreateStudioConfig && serviceKind === 'individual' && availabilityMode === 'custom_windows') {
+    if (showCreateStudioConfig && studioServiceType === 'individual' && serviceKind === 'individual' && availabilityMode === 'custom_windows') {
       const availCheck = validateServiceAvailabilityWindows({
         mode: availabilityMode,
         windows: availabilityWindows,
@@ -713,13 +732,13 @@ export const ServicesView: React.FC = () => {
     }
 
     try {
-      const effectiveKind = showCreateStudioConfig ? serviceKind : 'individual';
+      const effectiveKind = showCreateStudioConfig ? (studioServiceType === 'group' ? 'group' : 'individual') : 'individual';
       const normalizedCreateLinked = showCreateStudioConfig
         ? Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean)))
         : [professionalId];
       const normalizedCreatePrice = price.trim() !== '' ? Number(price) : 0;
       const createdRes = await ApiClient.post<any>('/v1/services', {
-        professionalId,
+        professionalId: professionalId || null,
         ...(showCreateStudioConfig ? { linkedProfessionalIds: normalizedCreateLinked } : {}),
         clinicalModule: clinicalModule || null,
         name: name.trim(),
@@ -734,6 +753,11 @@ export const ServicesView: React.FC = () => {
         ...(isStudioCompatible ? { serviceDomain: showCreateStudioConfig ? 'studio' : 'clinical' } : {}),
         ...(showCreateStudioConfig
           ? {
+              studioServiceType,
+              requiresAppointment: createRequiresAppointment,
+              allowPublicBooking,
+              accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
+              pricingAdjustments,
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 allowRecurrence
@@ -877,7 +901,14 @@ export const ServicesView: React.FC = () => {
     setEditPrice(s.price !== undefined && s.price !== null ? String(s.price) : '0.00');
     setEditModality(s.modality || 'both');
     setEditServiceDomain(domain);
-    setEditServiceKind(domain === 'studio' && s.service_kind === 'group' ? 'group' : 'individual');
+    const resolvedEditType = domain === 'studio'
+      ? normalizeStudioServiceType(s.studio_service_type, s.service_kind)
+      : 'individual';
+    setEditStudioServiceType(resolvedEditType);
+    setEditServiceKind(domain === 'studio' && (s.service_kind === 'group' || resolvedEditType === 'group') ? 'group' : 'individual');
+    setEditAccessConfig(normalizeStudioAccessConfig(s.access_config));
+    setEditPricingAdjustments(normalizeStudioPriceAdjustments(s.pricing_adjustments));
+    setEditAllowPublicBooking(s.allow_public_booking !== 0 && s.allow_public_booking !== false);
     setEditDefaultCapacity(Number(s.default_capacity) || 10);
     setEditAllowRecurrence(recCfg.allowRecurrence);
     setEditAllowedFrequencies(
@@ -946,16 +977,17 @@ export const ServicesView: React.FC = () => {
       }
     }
 
-    if (!editProfessionalId) {
+    const editRequiresAppointment = !showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled');
+    if (!editProfessionalId && editRequiresAppointment) {
       showToast('Selecione o profissional responsável pelo serviço', 'error');
       return;
     }
 
-    if (showEditStudioConfig && editServiceKind === 'group' && hasPendingEditScheduleForm) {
+    if (showEditStudioConfig && editStudioServiceType === 'group' && editServiceKind === 'group' && hasPendingEditScheduleForm) {
       showToast('Confirme ou cancele o horário aberto na grade semanal antes de salvar.', 'error');
       return;
     }
-    if (showEditStudioConfig && editServiceKind === 'individual' && editAvailabilityMode === 'custom_windows') {
+    if (showEditStudioConfig && editStudioServiceType === 'individual' && editServiceKind === 'individual' && editAvailabilityMode === 'custom_windows') {
       const editAvailCheck = validateServiceAvailabilityWindows({
         mode: editAvailabilityMode,
         windows: editAvailabilityWindows,
@@ -972,7 +1004,7 @@ export const ServicesView: React.FC = () => {
 
     try {
       setUpdating(true);
-      const effectiveEditKind = showEditStudioConfig ? editServiceKind : 'individual';
+      const effectiveEditKind = showEditStudioConfig ? (editStudioServiceType === 'group' ? 'group' : 'individual') : 'individual';
       const normalizedEditLinked = showEditStudioConfig
         ? Array.from(new Set([editProfessionalId, ...editLinkedProfessionalIds].filter(Boolean)))
         : [editProfessionalId];
@@ -983,7 +1015,7 @@ export const ServicesView: React.FC = () => {
         editDraftClassSchedules.length > 0;
       const normalizedEditPrice = editPrice.trim() !== '' ? Number(editPrice) : 0;
       const updRes = await ApiClient.put<any>(`/v1/services/${editingService.id}`, {
-        professionalId: editProfessionalId,
+        professionalId: editProfessionalId || null,
         ...(showEditStudioConfig ? { linkedProfessionalIds: normalizedEditLinked } : {}),
         clinicalModule: editClinicalModule || null,
         name: editName.trim(),
@@ -998,6 +1030,11 @@ export const ServicesView: React.FC = () => {
         ...(isStudioCompatible ? { serviceDomain: showEditStudioConfig ? 'studio' : 'clinical' } : {}),
         ...(showEditStudioConfig
           ? {
+              studioServiceType: editStudioServiceType,
+              requiresAppointment: editRequiresAppointment,
+              allowPublicBooking: editAllowPublicBooking,
+              accessConfig: editStudioServiceType === 'facility_access' ? editAccessConfig : null,
+              pricingAdjustments: editPricingAdjustments,
               allowedRecurrenceFrequencies: editAllowRecurrence ? editAllowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 editAllowRecurrence
@@ -1316,9 +1353,17 @@ export const ServicesView: React.FC = () => {
                                     {CLINICAL_MODULE_LABELS[s.clinical_module] || s.clinical_module}
                                   </span>
                                 )}
-                                {s.service_kind === 'group' && (
+                                {s.studio_service_type === 'facility_access' ? (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full inline-block">
+                                    Acesso {s.access_config?.accessMode === 'limited' ? `Limitado (${s.access_config?.maxEntriesPerWeek || s.access_config?.maxEntriesPerMonth || 3}x)` : 'Livre'} • Sem agenda
+                                  </span>
+                                ) : s.studio_service_type === 'non_scheduled' ? (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-full inline-block">
+                                    Serviço Entregável • Sem agenda
+                                  </span>
+                                ) : s.service_kind === 'group' && (
                                   <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-full inline-block">
-                                    Turma • {s.default_capacity || 1} vagas
+                                    {Number(s.default_capacity) === 2 ? 'Dupla • 2 vagas' : `Turma • ${s.default_capacity || 1} vagas`}
                                   </span>
                                 )}
                                 {s.specialty_name && (
@@ -1640,7 +1685,8 @@ export const ServicesView: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden mobile-modal">
           <StudioServicePresentation enabled={isPureStudio} title="Novo Serviço" onClose={() => setShowServiceModal(false)}
             values={{
-              name, professionalId, serviceKind,
+              name, professionalId, serviceKind, studioServiceType,
+              requiresAppointment: studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled',
               price, billingMode, periodicPrice, frequencyPricing, pricingRule, individualMeetings,
               defaultBillingDueDay, weeklySessionsCount, includedSessionsCount,
               allowRecurrence, defaultFrequency, defaultCustomInterval,
@@ -1669,16 +1715,22 @@ export const ServicesView: React.FC = () => {
             <ServiceFormBody>
               <ServiceFormSection section="basics">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Profissional Responsável {showCreateStudioConfig && (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled') ? '(Opcional)' : '*'}
+                </label>
                 <select
                   data-studio-field={isPureStudio ? "professional" : undefined}
                   aria-label={isPureStudio ? "Profissional responsável" : undefined}
                   value={professionalId}
                   onChange={e => handleSelectProfessional(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium cursor-pointer"
-                  required
+                  required={!showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')}
                 >
-                  <option value="">Selecione o profissional...</option>
+                  <option value="">
+                    {showCreateStudioConfig && (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled')
+                      ? 'Sem profissional específico (Geral da Academia & Studio)'
+                      : 'Selecione o profissional...'}
+                  </option>
                   {professionals.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.name} {p.profession_name ? `(${p.profession_name})` : ''}
@@ -1686,7 +1738,7 @@ export const ServicesView: React.FC = () => {
                   ))}
                 </select>
 
-                {showCreateStudioConfig && (
+                {showCreateStudioConfig && studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
                   <div className="mt-2">
                     <LinkedInstructorsSelector
                       professionals={professionals}
@@ -1847,33 +1899,60 @@ export const ServicesView: React.FC = () => {
 
               {showCreateStudioConfig ? (
                 <div className={isPureStudio ? "studio-service-config contents" : "p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5"}>
-                  {!isPureStudio && <div className="font-bold text-slate-800 text-xs">Configurações do Studio</div>}
+                  {!isPureStudio && <div className="font-bold text-slate-800 text-xs">Configurações de Academia &amp; Studio</div>}
                   <ServiceFormSection section="format">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setServiceKind('individual')}
-                      className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
-                        serviceKind === 'individual'
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      Individual
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setServiceKind('group')}
-                      className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
-                        serviceKind === 'group'
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      Aula coletiva / Turma
-                    </button>
-                  </div>
-                  {serviceKind === 'group' && (
+                  <StudioAccessAndAdjustmentsPanel
+                    studioServiceType={studioServiceType}
+                    onStudioServiceTypeChange={nextType => {
+                      setStudioServiceType(nextType);
+                      setServiceKind(nextType === 'group' ? 'group' : 'individual');
+                      if (nextType === 'facility_access' && billingMode === 'per_session') {
+                        setBillingMode('monthly');
+                        if (!periodicPrice) setPeriodicPrice(price || '180.00');
+                      }
+                    }}
+                    accessConfig={accessConfig}
+                    onAccessConfigChange={setAccessConfig}
+                    pricingAdjustments={pricingAdjustments}
+                    onPricingAdjustmentsChange={setPricingAdjustments}
+                    defaultCapacity={defaultCapacity}
+                    onDefaultCapacityChange={setDefaultCapacity}
+                    allowPublicBooking={allowPublicBooking}
+                    onAllowPublicBookingChange={setAllowPublicBooking}
+                  />
+                  {studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setServiceKind('individual');
+                          setStudioServiceType('individual');
+                        }}
+                        className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
+                          serviceKind === 'individual'
+                            ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        Individual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setServiceKind('group');
+                          setStudioServiceType('group');
+                        }}
+                        className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
+                          serviceKind === 'group'
+                            ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        Aula coletiva / Turma
+                      </button>
+                    </div>
+                  )}
+                  {studioServiceType === 'group' && serviceKind === 'group' && (
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">Vagas por aula/turma *</label>
                       <input
@@ -1889,7 +1968,7 @@ export const ServicesView: React.FC = () => {
                   )}
                   </ServiceFormSection>
                   <ServiceFormSection section="recurrence">
-                  {serviceKind === 'group' && (
+                  {studioServiceType === 'group' && serviceKind === 'group' && (
                     <ClassScheduleSection
                       serviceId={null}
                       serviceModality={modality}
@@ -1903,48 +1982,54 @@ export const ServicesView: React.FC = () => {
                       onFormOpenChange={setHasPendingCreateScheduleForm}
                     />
                   )}
-                  <ServiceRecurrenceConfigPanel
-                    allowRecurrence={allowRecurrence}
-                    allowedFrequencies={allowedFrequencies}
-                    allowedWeekdays={allowedWeekdays}
-                    defaultFrequency={defaultFrequency}
-                    customIntervals={customIntervals}
-                    defaultCustomInterval={defaultCustomInterval}
-                    allowedPlanDurations={allowedPlanDurations}
-                    defaultPlanDuration={defaultPlanDuration}
-                    serviceKind={serviceKind}
-                    scheduledWeekdays={
-                      serviceKind === 'group'
-                        ? createGroupScheduledWeekdays
-                        : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
-                    }
-                    individualAvailabilitySlot={
-                      serviceKind === 'individual' ? (
-                        <ServiceAvailabilitySection
-                          mode={availabilityMode}
-                          windows={availabilityWindows}
-                          schedules={createProfSchedules}
-                          schedulesLoading={createProfSchedulesLoading}
-                          allowedWeekdays={allowedWeekdays}
-                          restrictWeekdays={allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0}
-                          defaultProfessionalId={professionalId}
-                          onModeChange={setAvailabilityMode}
-                          onWindowsChange={setAvailabilityWindows}
-                          testIdPrefix="create-service-availability"
-                        />
-                      ) : null
-                    }
-                    onChange={next => {
-                      setAllowRecurrence(next.allowRecurrence);
-                      setAllowedFrequencies(next.allowedFrequencies);
-                      setAllowedWeekdays(next.allowedWeekdays);
-                      setDefaultFrequency(next.defaultFrequency);
-                      setCustomIntervals(next.customIntervals);
-                      setDefaultCustomInterval(next.defaultCustomInterval);
-                      setAllowedPlanDurations(next.allowedPlanDurations);
-                      setDefaultPlanDuration(next.defaultPlanDuration);
-                    }}
-                  />
+                  {studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' ? (
+                    <ServiceRecurrenceConfigPanel
+                      allowRecurrence={allowRecurrence}
+                      allowedFrequencies={allowedFrequencies}
+                      allowedWeekdays={allowedWeekdays}
+                      defaultFrequency={defaultFrequency}
+                      customIntervals={customIntervals}
+                      defaultCustomInterval={defaultCustomInterval}
+                      allowedPlanDurations={allowedPlanDurations}
+                      defaultPlanDuration={defaultPlanDuration}
+                      serviceKind={serviceKind}
+                      scheduledWeekdays={
+                        serviceKind === 'group'
+                          ? createGroupScheduledWeekdays
+                          : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
+                      }
+                      individualAvailabilitySlot={
+                        serviceKind === 'individual' ? (
+                          <ServiceAvailabilitySection
+                            mode={availabilityMode}
+                            windows={availabilityWindows}
+                            schedules={createProfSchedules}
+                            schedulesLoading={createProfSchedulesLoading}
+                            allowedWeekdays={allowedWeekdays}
+                            restrictWeekdays={allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0}
+                            defaultProfessionalId={professionalId}
+                            onModeChange={setAvailabilityMode}
+                            onWindowsChange={setAvailabilityWindows}
+                            testIdPrefix="create-service-availability"
+                          />
+                        ) : null
+                      }
+                      onChange={next => {
+                        setAllowRecurrence(next.allowRecurrence);
+                        setAllowedFrequencies(next.allowedFrequencies);
+                        setAllowedWeekdays(next.allowedWeekdays);
+                        setDefaultFrequency(next.defaultFrequency);
+                        setCustomIntervals(next.customIntervals);
+                        setDefaultCustomInterval(next.defaultCustomInterval);
+                        setAllowedPlanDurations(next.allowedPlanDurations);
+                        setDefaultPlanDuration(next.defaultPlanDuration);
+                      }}
+                    />
+                  ) : (
+                    <p className="text-xs text-slate-600">
+                      Este serviço não ocupa horários fixos na agenda de instrutores. Os prazos de vigência e limites de entrada são controlados diretamente pela matrícula.
+                    </p>
+                  )}
                   </ServiceFormSection>
                   <ServiceFormSection section="billing">
                   <ServiceBillingConfigPanel
@@ -1958,7 +2043,7 @@ export const ServicesView: React.FC = () => {
                     weeklySessionsCount={weeklySessionsCount}
                     allowFrequencyPricing={showCreateStudioConfig}
                     frequencyPricing={frequencyPricing} onFrequencyPricingChange={setFrequencyPricing}
-                    offeredWeeklySessions={createContractableWeeklySessions}
+                    offeredWeeklySessions={studioServiceType === 'facility_access' ? 7 : createContractableWeeklySessions}
                     includedSessionsCount={includedSessionsCount}
                     defaultPackageId={defaultPackageId}
                     defaultBillingDueDay={defaultBillingDueDay}
@@ -2135,7 +2220,8 @@ export const ServicesView: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-hidden mobile-modal">
           <StudioServicePresentation enabled={isPureStudio} title="Editar Serviço" onClose={() => setEditingService(null)}
             values={{
-              name: editName, professionalId: editProfessionalId, serviceKind: editServiceKind,
+              name: editName, professionalId: editProfessionalId, serviceKind: editServiceKind, studioServiceType: editStudioServiceType,
+              requiresAppointment: editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled',
               price: editPrice, billingMode: editBillingMode, periodicPrice: editPeriodicPrice, frequencyPricing: editFrequencyPricing, pricingRule: editPricingRule, individualMeetings: editIndividualMeetings,
               defaultBillingDueDay: editDefaultBillingDueDay, weeklySessionsCount: editWeeklySessionsCount, includedSessionsCount: editIncludedSessionsCount,
               allowRecurrence: editAllowRecurrence, defaultFrequency: editDefaultFrequency, defaultCustomInterval: editDefaultCustomInterval,
@@ -2164,16 +2250,22 @@ export const ServicesView: React.FC = () => {
             <ServiceFormBody>
               <ServiceFormSection section="basics">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Profissional Responsável {showEditStudioConfig && (editStudioServiceType === 'facility_access' || editStudioServiceType === 'non_scheduled') ? '(Opcional)' : '*'}
+                </label>
                 <select
                   data-studio-field={isPureStudio ? "professional" : undefined}
                   aria-label={isPureStudio ? "Profissional responsável" : undefined}
                   value={editProfessionalId}
                   onChange={e => handleSelectEditProfessional(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                  required
+                  required={!showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled')}
                 >
-                  <option value="">Selecione o profissional...</option>
+                  <option value="">
+                    {showEditStudioConfig && (editStudioServiceType === 'facility_access' || editStudioServiceType === 'non_scheduled')
+                      ? 'Sem profissional específico (Geral da Academia & Studio)'
+                      : 'Selecione o profissional...'}
+                  </option>
                   {professionals.map(p => (
                     <option key={p.id} value={p.id}>
                       {p.name} {p.profession_name ? `(${p.profession_name})` : ''}
@@ -2181,7 +2273,7 @@ export const ServicesView: React.FC = () => {
                   ))}
                 </select>
 
-                {showEditStudioConfig && (
+                {showEditStudioConfig && editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled' && (
                   <div className="mt-2">
                     <LinkedInstructorsSelector
                       professionals={professionals}
@@ -2361,33 +2453,60 @@ export const ServicesView: React.FC = () => {
 
               {showEditStudioConfig ? (
                 <div className={isPureStudio ? "studio-service-config contents" : "p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5"}>
-                  {!isPureStudio && <div className="font-bold text-slate-800 text-xs">Configurações do Studio</div>}
+                  {!isPureStudio && <div className="font-bold text-slate-800 text-xs">Configurações de Academia &amp; Studio</div>}
                   <ServiceFormSection section="format">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditServiceKind('individual')}
-                      className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
-                        editServiceKind === 'individual'
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      Individual
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditServiceKind('group')}
-                      className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
-                        editServiceKind === 'group'
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      Aula coletiva / Turma
-                    </button>
-                  </div>
-                  {editServiceKind === 'group' && (
+                  <StudioAccessAndAdjustmentsPanel
+                    studioServiceType={editStudioServiceType}
+                    onStudioServiceTypeChange={nextType => {
+                      setEditStudioServiceType(nextType);
+                      setEditServiceKind(nextType === 'group' ? 'group' : 'individual');
+                      if (nextType === 'facility_access' && editBillingMode === 'per_session') {
+                        setEditBillingMode('monthly');
+                        if (!editPeriodicPrice) setEditPeriodicPrice(editPrice || '180.00');
+                      }
+                    }}
+                    accessConfig={editAccessConfig}
+                    onAccessConfigChange={setEditAccessConfig}
+                    pricingAdjustments={editPricingAdjustments}
+                    onPricingAdjustmentsChange={setEditPricingAdjustments}
+                    defaultCapacity={editDefaultCapacity}
+                    onDefaultCapacityChange={setEditDefaultCapacity}
+                    allowPublicBooking={editAllowPublicBooking}
+                    onAllowPublicBookingChange={setEditAllowPublicBooking}
+                  />
+                  {editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditServiceKind('individual');
+                          setEditStudioServiceType('individual');
+                        }}
+                        className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
+                          editServiceKind === 'individual'
+                            ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        Individual
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditServiceKind('group');
+                          setEditStudioServiceType('group');
+                        }}
+                        className={`px-3 py-2 rounded-xl border text-left font-semibold cursor-pointer transition-all ${
+                          editServiceKind === 'group'
+                            ? 'border-indigo-600 bg-indigo-50 text-indigo-800'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        Aula coletiva / Turma
+                      </button>
+                    </div>
+                  )}
+                  {editStudioServiceType === 'group' && editServiceKind === 'group' && (
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">Vagas por aula/turma *</label>
                       <input
@@ -2403,7 +2522,7 @@ export const ServicesView: React.FC = () => {
                   )}
                   </ServiceFormSection>
                   <ServiceFormSection section="recurrence">
-                  {editServiceKind === 'group' && editingService && (
+                  {editStudioServiceType === 'group' && editServiceKind === 'group' && editingService && (
                     <ClassScheduleSection
                       serviceId={editingService.service_kind === 'group' ? editingService.id : null}
                       serviceModality={editModality}
@@ -2441,49 +2560,55 @@ export const ServicesView: React.FC = () => {
                       }}
                     />
                   )}
-                  <ServiceRecurrenceConfigPanel
-                    allowRecurrence={editAllowRecurrence}
-                    allowedFrequencies={editAllowedFrequencies}
-                    allowedWeekdays={editAllowedWeekdays}
-                    defaultFrequency={editDefaultFrequency}
-                    customIntervals={editCustomIntervals}
-                    defaultCustomInterval={editDefaultCustomInterval}
-                    allowedPlanDurations={editAllowedPlanDurations}
-                    defaultPlanDuration={editDefaultPlanDuration}
-                    serviceKind={editServiceKind}
-                    scheduledWeekdays={
-                      editServiceKind === 'group'
-                        ? editGroupScheduledWeekdays
-                        : Array.from(new Set(editIndividualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
-                    }
-                    individualAvailabilitySlot={
-                      editServiceKind === 'individual' ? (
-                        <ServiceAvailabilitySection
-                          mode={editAvailabilityMode}
-                          windows={editAvailabilityWindows}
-                          schedules={editProfSchedules}
-                          schedulesLoading={editProfSchedulesLoading}
-                          allowedWeekdays={editAllowedWeekdays}
-                          restrictWeekdays={editAllowRecurrence && editAllowedFrequencies.includes('custom_weekdays') && editAllowedWeekdays.length > 0}
-                          diagnostics={editingService?.availability_diagnostics || null}
-                          defaultProfessionalId={editProfessionalId}
-                          onModeChange={setEditAvailabilityMode}
-                          onWindowsChange={setEditAvailabilityWindows}
-                          testIdPrefix="edit-service-availability"
-                        />
-                      ) : null
-                    }
-                    onChange={next => {
-                      setEditAllowRecurrence(next.allowRecurrence);
-                      setEditAllowedFrequencies(next.allowedFrequencies);
-                      setEditAllowedWeekdays(next.allowedWeekdays);
-                      setEditDefaultFrequency(next.defaultFrequency);
-                      setEditCustomIntervals(next.customIntervals);
-                      setEditDefaultCustomInterval(next.defaultCustomInterval);
-                      setEditAllowedPlanDurations(next.allowedPlanDurations);
-                      setEditDefaultPlanDuration(next.defaultPlanDuration);
-                    }}
-                  />
+                  {editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled' ? (
+                    <ServiceRecurrenceConfigPanel
+                      allowRecurrence={editAllowRecurrence}
+                      allowedFrequencies={editAllowedFrequencies}
+                      allowedWeekdays={editAllowedWeekdays}
+                      defaultFrequency={editDefaultFrequency}
+                      customIntervals={editCustomIntervals}
+                      defaultCustomInterval={editDefaultCustomInterval}
+                      allowedPlanDurations={editAllowedPlanDurations}
+                      defaultPlanDuration={editDefaultPlanDuration}
+                      serviceKind={editServiceKind}
+                      scheduledWeekdays={
+                        editServiceKind === 'group'
+                          ? editGroupScheduledWeekdays
+                          : Array.from(new Set(editIndividualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
+                      }
+                      individualAvailabilitySlot={
+                        editServiceKind === 'individual' ? (
+                          <ServiceAvailabilitySection
+                            mode={editAvailabilityMode}
+                            windows={editAvailabilityWindows}
+                            schedules={editProfSchedules}
+                            schedulesLoading={editProfSchedulesLoading}
+                            allowedWeekdays={editAllowedWeekdays}
+                            restrictWeekdays={editAllowRecurrence && editAllowedFrequencies.includes('custom_weekdays') && editAllowedWeekdays.length > 0}
+                            diagnostics={editingService?.availability_diagnostics || null}
+                            defaultProfessionalId={editProfessionalId}
+                            onModeChange={setEditAvailabilityMode}
+                            onWindowsChange={setEditAvailabilityWindows}
+                            testIdPrefix="edit-service-availability"
+                          />
+                        ) : null
+                      }
+                      onChange={next => {
+                        setEditAllowRecurrence(next.allowRecurrence);
+                        setEditAllowedFrequencies(next.allowedFrequencies);
+                        setEditAllowedWeekdays(next.allowedWeekdays);
+                        setEditDefaultFrequency(next.defaultFrequency);
+                        setEditCustomIntervals(next.customIntervals);
+                        setEditDefaultCustomInterval(next.defaultCustomInterval);
+                        setEditAllowedPlanDurations(next.allowedPlanDurations);
+                        setEditDefaultPlanDuration(next.defaultPlanDuration);
+                      }}
+                    />
+                  ) : (
+                    <p className="text-xs text-slate-600">
+                      Este serviço não ocupa horários fixos na agenda de instrutores. Os prazos de vigência e limites de entrada são controlados diretamente pela matrícula.
+                    </p>
+                  )}
                   </ServiceFormSection>
                   <ServiceFormSection section="billing">
                   <ServiceBillingConfigPanel
@@ -2497,7 +2622,7 @@ export const ServicesView: React.FC = () => {
                     weeklySessionsCount={editWeeklySessionsCount}
                     allowFrequencyPricing={showEditStudioConfig}
                     frequencyPricing={editFrequencyPricing} onFrequencyPricingChange={setEditFrequencyPricing}
-                    offeredWeeklySessions={editContractableWeeklySessions}
+                    offeredWeeklySessions={editStudioServiceType === 'facility_access' ? 7 : editContractableWeeklySessions}
                     includedSessionsCount={editIncludedSessionsCount}
                     defaultPackageId={editDefaultPackageId}
                     defaultBillingDueDay={editDefaultBillingDueDay}

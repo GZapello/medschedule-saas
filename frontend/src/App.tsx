@@ -34,6 +34,8 @@ const PatientsView = lazyWithRetry(() => import('./components/patients/PatientsV
 const ClinicalRecordsView = lazyWithRetry(() => import('./components/clinical/ClinicalRecordsView').then(module => ({ default: module.ClinicalRecordsView })), 'ClinicalRecordsView');
 const ZemdaBodyRecordsView = lazyWithRetry(() => import('./components/zemda-body/ZemdaBodyRecordsView').then(module => ({ default: module.ZemdaBodyRecordsView })), 'ZemdaBodyRecordsView');
 const ZemdaPersonalView = lazyWithRetry(() => import('./components/personal/ZemdaPersonalView').then(module => ({ default: module.ZemdaPersonalView })), 'ZemdaPersonalView');
+const StudioEnrollmentsView = lazyWithRetry(() => import('./components/studio/StudioEnrollmentsView').then(module => ({ default: module.StudioEnrollmentsView })), 'StudioEnrollmentsView');
+const StudioAccessControlView = lazyWithRetry(() => import('./components/studio/StudioAccessControlView').then(module => ({ default: module.StudioAccessControlView })), 'StudioAccessControlView');
 const PhysiotherapyWorkspace = lazyWithRetry(() => import('./components/physiotherapy/PhysiotherapyWorkspace').then(module => ({ default: module.PhysiotherapyWorkspace })), 'PhysiotherapyWorkspace');
 const DentistryWorkspace = lazyWithRetry(() => import('./components/dentistry/DentistryWorkspace').then(module => ({ default: module.DentistryWorkspace })), 'DentistryWorkspace');
 const NutritionWorkspace = lazyWithRetry(() => import('./components/nutrition/NutritionWorkspace').then(module => ({ default: module.NutritionWorkspace })), 'NutritionWorkspace');
@@ -140,6 +142,8 @@ export const VIEW_TO_PATH: Record<string, string> = {
   dashboard: '/dashboard',
   calendar: '/agenda',
   patients: '/pacientes',
+  'studio-enrollments': '/matriculas',
+  'studio-access': '/controle-acesso',
   clinical: '/atendimentos',
   zemda360: '/zemda360',
   'zemda-body': '/mapa-corporal',
@@ -179,6 +183,8 @@ export const PATH_TO_VIEW: Record<string, string> = {
   '/dashboard': 'dashboard',
   '/agenda': 'calendar',
   '/pacientes': 'patients',
+  '/matriculas': 'studio-enrollments',
+  '/controle-acesso': 'studio-access',
   '/atendimentos': 'clinical',
   '/zemda360': 'zemda-body',
   '/mapa-corporal': 'zemda-body',
@@ -243,7 +249,7 @@ export function parseRouteFromPath(pathname: string): { view: string; subId?: st
 }
 
 const VALID_VIEWS = new Set([
-  'dashboard', 'calendar', 'patients', 'clinical', 'zemda-med', 'zemda-body', 'zemda360',
+  'dashboard', 'calendar', 'patients', 'studio-enrollments', 'studio-access', 'clinical', 'zemda-med', 'zemda-body', 'zemda360',
   'zemda-personal', 'zemda-fisio', 'zemda-odonto', 'zemda-estetic', 'zemda-nutri',
   'nutrition-workspace', 'zemda-to', 'occupational-therapy-workspace', 'zemda-fono',
   'speech-therapy-workspace', 'zemda-psico', 'zemda-pp', 'psychopedagogy-workspace',
@@ -1416,7 +1422,7 @@ const AppContent: React.FC = () => {
                 : `Profissional: ${currentUser?.professionName || currentUser?.name || 'Simulado'}`}
             </span>
             <span className="bg-white/10 px-2 py-0.5 rounded-md text-purple-200 text-[11px]">
-              {currentTenant?.establishment_profile === 'studio' ? 'Studio / Academia' : currentTenant?.establishment_profile === 'mixed' ? 'Misto' : 'Clínica'}
+              {currentTenant?.establishment_profile === 'studio' ? 'Academia & Studio' : currentTenant?.establishment_profile === 'mixed' ? 'Misto' : 'Clínica'}
               {currentUser?.sandboxPlanCode ? ` · Plano ${currentUser.sandboxPlanCode}` : ''}
             </span>
             <span className="hidden lg:inline text-purple-300 font-normal">
@@ -1542,6 +1548,14 @@ const AppContent: React.FC = () => {
               initialTab={patientInitialTab}
               onSelectPatient={(pId) => handleNavigateView('patients', pId)}
             />
+          )}
+
+          {currentView === 'studio-enrollments' && supportsStudioFeatures(currentTenant?.establishment_profile) && (
+            <StudioEnrollmentsView />
+          )}
+
+          {currentView === 'studio-access' && supportsStudioFeatures(currentTenant?.establishment_profile) && (
+            <StudioAccessControlView />
           )}
 
           {currentView === 'clinical' && <ClinicalRecordsView initialPatientId={subRouteId || undefined} onNavigate={handleNavigateView} />}

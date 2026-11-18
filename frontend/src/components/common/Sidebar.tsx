@@ -33,6 +33,8 @@ import {
   RotateCcw,
   Eye,
   EyeOff,
+  KeyRound,
+  UserCheck,
   X
 } from 'lucide-react';
 
@@ -151,6 +153,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: `${clientTermLabel}s`,
           icon: Users,
           visible: isClinicAdmin || isProfessional || isReceptionist || hasPermission('create_patient') || hasPermission('edit_patient')
+        },
+        {
+          id: 'studio-enrollments',
+          label: 'Matrículas e Acessos',
+          icon: KeyRound,
+          visible:
+            supportsStudioFeatures(currentTenant?.establishment_profile) &&
+            (isClinicAdmin || isReceptionist || isProfessional || hasPermission('view_enrollments') || hasPermission('manage_contracts'))
+        },
+        {
+          id: 'studio-access',
+          label: 'Controle de Acesso',
+          icon: UserCheck,
+          visible:
+            supportsStudioFeatures(currentTenant?.establishment_profile) &&
+            (isClinicAdmin || isReceptionist || isProfessional || hasPermission('register_access') || hasPermission('view_attendance'))
         },
         {
           id: 'clinical',

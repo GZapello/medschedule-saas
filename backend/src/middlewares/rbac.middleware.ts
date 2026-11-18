@@ -46,7 +46,7 @@ export function getUserPermissions(userId: string, tenantId: string, fallbackRol
   return Array.from(new Set([...perms, ...defaultPerms]));
 }
 
-export function requirePermissionOrRole(permissionId: string, ...allowedRoles: Role[]) {
+export function requirePermissionOrRole(permissionId: string | string[], ...allowedRoles: Role[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: 'Usuário não autenticado' });
@@ -80,7 +80,8 @@ export function requirePermissionOrRole(permissionId: string, ...allowedRoles: R
         const defaultPerms = getDefaultPermissionsForRole(userRole);
         const effectivePerms = Array.from(new Set([...perms, ...defaultPerms]));
 
-        if (effectivePerms.includes(permissionId)) {
+        const requiredList = Array.isArray(permissionId) ? permissionId : [permissionId];
+        if (requiredList.some(p => effectivePerms.includes(p))) {
           return next();
         }
       } catch (_) {}

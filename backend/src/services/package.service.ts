@@ -2,11 +2,18 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { BillingCycleService, normalizePeriodicFrequency } from './billing-cycle.service';
 import { PeriodicBillingFrequency } from '../utils/establishment-context';
+import { normalizeStudioAccessConfig, normalizeStudioServiceType } from '../utils/studio-access-and-commercial';
 
 export interface PackageItemInput {
   serviceId: string;
   includedCredits?: number | null;
   weeklyFrequency?: number | null;
+  monthlyLimit?: number | null;
+  itemType?: 'scheduled_service' | 'facility_access' | 'deliverable';
+  accessMode?: 'unlimited' | 'limited' | null;
+  isMandatory?: boolean | number;
+  itemPrice?: number | null;
+  accessRules?: any;
 }
 
 export interface CreatePackageInput {
@@ -15,6 +22,12 @@ export interface CreatePackageInput {
   billingType?: 'one_time' | 'recurring_monthly';
   billingFrequency?: PeriodicBillingFrequency;
   price: number;
+  discountPercent?: number | null;
+  contractDurationCode?: string | null;
+  paymentPeriodicity?: string | null;
+  fidelityMonths?: number;
+  gracePeriodDays?: number;
+  autoRenew?: boolean | number;
   creditMode?: 'per_service' | 'shared_pool';
   totalCredits?: number | null;
   weeklyLimit?: number | null;
@@ -42,6 +55,8 @@ export interface CreateContractInput {
   installmentsCount?: number;
   notes?: string | null;
   generateInitialCharge?: boolean;
+  allowDuplicateAccessBenefit?: boolean;
+  optionalServiceIds?: string[];
   createdBy?: string;
 }
 
@@ -121,6 +136,9 @@ export class PackageService {
         s.price as single_session_price,
         s.modality,
         COALESCE(s.service_kind, 'individual') as service_kind,
+        COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+        COALESCE(s.requires_appointment, 1) as requires_appointment,
+        s.access_config_json,
         s.default_capacity,
         COALESCE(s.allow_recurrence, 1) as allow_recurrence,
         s.modality_category,
@@ -151,15 +169,32 @@ export class PackageService {
         const professionals = opts?.publicOnly
           ? allProfs.filter(p => Number(p.public_booking_enabled) === 1)
           : allProfs;
+        const resolvedStudioType = normalizeStudioServiceType(item.studio_service_type, item.service_kind);
+        const resolvedItemType =
+          item.item_type === 'facility_access' || item.item_type === 'deliverable'
+            ? item.item_type
+            : (resolvedStudioType === 'facility_access'
+                ? 'facility_access'
+                : (resolvedStudioType === 'non_scheduled' ? 'deliverable' : 'scheduled_service'));
+        const resolvedAccessMode =
+          resolvedItemType === 'facility_access'
+            ? (item.access_mode === 'limited' ? 'limited' : (Number(item.included_credits || 0) > 0 || Number(item.weekly_frequency || 0) > 0 || Number(item.monthly_limit || 0) > 0 ? 'limited' : 'unlimited'))
+            : null;
         return {
           ...item,
+          item_type: resolvedItemType,
+          access_mode: resolvedAccessMode,
+          requires_appointment: resolvedItemType === 'scheduled_service' ? 1 : 0,
+          is_mandatory: Number(item.is_mandatory ?? 1) === 0 ? 0 : 1,
           professionals
         };
       });
 
       const computedTotalCredits = pkg.credit_mode === 'shared_pool'
         ? Number(pkg.total_credits || 0)
-        : items.reduce((sum, it) => sum + Number(it.included_credits || 0), 0);
+        : items
+            .filter(it => it.item_type !== 'facility_access' || it.access_mode === 'limited')
+            .reduce((sum, it) => sum + Number(it.included_credits || 0), 0);
 
       return {
         ...pkg,
@@ -168,13 +203,16 @@ export class PackageService {
       };
     }).filter(pkg => {
       if (!opts?.publicOnly) return true;
-      return pkg.items.length > 0 && pkg.items.every((it: any) => Number(it.service_active) === 1 && it.professionals.length > 0);
+      return pkg.items.length > 0 && pkg.items.every((it: any) =>
+        Number(it.service_active) === 1 &&
+        (Number(it.requires_appointment) === 0 || it.professionals.length > 0)
+      );
     });
   }
 
   static createPackage(tenantId: string, input: CreatePackageInput, createdBy: string): any {
     if (!this.isStudioCompatible(tenantId)) {
-      const err: any = new Error('Pacotes de serviços são habilitados para estabelecimentos configurados como Studio ou Misto.');
+      const err: any = new Error('Pacotes de serviços são habilitados para estabelecimentos configurados como Academia & Studio ou Misto.');
       err.status = 403;
       throw err;
     }
@@ -203,33 +241,89 @@ export class PackageService {
     }
 
     const seenServices = new Set<string>();
-    const validatedItems: Array<{ serviceId: string; includedCredits: number | null; weeklyFrequency: number | null }> = [];
+    const validatedItems: Array<{
+      serviceId: string;
+      includedCredits: number | null;
+      weeklyFrequency: number | null;
+      monthlyLimit: number | null;
+      itemType: 'scheduled_service' | 'facility_access' | 'deliverable';
+      accessMode: 'unlimited' | 'limited' | null;
+      isMandatory: number;
+      itemPrice: number | null;
+      accessRulesJson: string | null;
+    }> = [];
     for (const rawItem of items) {
       const serviceId = String(rawItem.serviceId || '').trim();
       if (!serviceId || seenServices.has(serviceId)) continue;
       seenServices.add(serviceId);
 
-      const srv = db.prepare(`SELECT id FROM services WHERE id = ? AND tenant_id = ? AND active = 1`).get(serviceId, tenantId);
+      const srv = db.prepare(`SELECT id, studio_service_type, service_kind, requires_appointment, access_config_json FROM services WHERE id = ? AND tenant_id = ? AND active = 1`).get(serviceId, tenantId) as any;
       if (!srv) {
         const err: any = new Error('Um ou mais serviços selecionados não pertencem a este estabelecimento ou estão inativos.');
         err.status = 400;
         throw err;
       }
 
+      const srvStudioType = normalizeStudioServiceType(srv.studio_service_type, srv.service_kind);
+      const itemType: 'scheduled_service' | 'facility_access' | 'deliverable' =
+        rawItem.itemType === 'facility_access' || rawItem.itemType === 'deliverable'
+          ? rawItem.itemType
+          : (srvStudioType === 'facility_access'
+              ? 'facility_access'
+              : (srvStudioType === 'non_scheduled' ? 'deliverable' : 'scheduled_service'));
+
+      const wf = rawItem.weeklyFrequency !== undefined && rawItem.weeklyFrequency !== null && rawItem.weeklyFrequency !== ('' as any)
+        ? Math.max(1, Math.min(14, Math.floor(Number(rawItem.weeklyFrequency))))
+        : null;
+      const ml = rawItem.monthlyLimit !== undefined && rawItem.monthlyLimit !== null && rawItem.monthlyLimit !== ('' as any)
+        ? Math.max(1, Math.min(200, Math.floor(Number(rawItem.monthlyLimit))))
+        : null;
+
+      let accessMode: 'unlimited' | 'limited' | null = null;
       let includedCredits: number | null = null;
-      if (creditMode === 'per_service') {
-        const c = Number(rawItem.includedCredits);
+
+      if (itemType === 'facility_access') {
+        const srvAccessCfg = normalizeStudioAccessConfig(srv.access_config_json);
+        accessMode = rawItem.accessMode === 'limited' || rawItem.accessMode === 'unlimited'
+          ? rawItem.accessMode
+          : ((wf !== null || ml !== null || (rawItem.includedCredits !== undefined && rawItem.includedCredits !== null && Number(rawItem.includedCredits) > 0))
+              ? 'limited'
+              : srvAccessCfg.accessMode);
+        if (accessMode === 'limited') {
+          const c = Number(rawItem.includedCredits || ml || (wf ? wf * 4 : 0));
+          includedCredits = Number.isInteger(c) && c > 0 ? Math.min(500, c) : null;
+        } else {
+          includedCredits = null;
+        }
+      } else if (creditMode === 'per_service' || itemType === 'deliverable') {
+        const c = Number(rawItem.includedCredits ?? (itemType === 'deliverable' ? 1 : 0));
         if (!Number.isInteger(c) || c < 1 || c > 500) {
-          const err: any = new Error('No modo por serviço, informe a quantidade de aulas incluídas (>= 1) para cada modalidade.');
+          const err: any = new Error('No modo por serviço, informe a quantidade de aulas/unidades incluídas (>= 1) para cada modalidade agendável.');
           err.status = 400;
           throw err;
         }
         includedCredits = c;
       }
-      const wf = rawItem.weeklyFrequency !== undefined && rawItem.weeklyFrequency !== null && rawItem.weeklyFrequency !== ('' as any)
-        ? Math.max(1, Math.min(14, Math.floor(Number(rawItem.weeklyFrequency))))
+
+      const isMandatory = rawItem.isMandatory === false || rawItem.isMandatory === 0 ? 0 : 1;
+      const itemPrice = rawItem.itemPrice !== undefined && rawItem.itemPrice !== null && Number.isFinite(Number(rawItem.itemPrice)) && Number(rawItem.itemPrice) >= 0
+        ? Math.round(Number(rawItem.itemPrice) * 100) / 100
         : null;
-      validatedItems.push({ serviceId, includedCredits, weeklyFrequency: wf });
+      const accessRulesJson = rawItem.accessRules
+        ? JSON.stringify(normalizeStudioAccessConfig(rawItem.accessRules))
+        : (itemType === 'facility_access' && srv.access_config_json ? String(srv.access_config_json) : null);
+
+      validatedItems.push({
+        serviceId,
+        includedCredits,
+        weeklyFrequency: wf,
+        monthlyLimit: ml,
+        itemType,
+        accessMode,
+        isMandatory,
+        itemPrice,
+        accessRulesJson
+      });
     }
 
     if (validatedItems.length === 0) {
@@ -239,14 +333,15 @@ export class PackageService {
     }
 
     let totalCredits: number;
+    const hasScheduledItems = validatedItems.some(it => it.itemType === 'scheduled_service');
     if (creditMode === 'shared_pool') {
       const tc = Number(input.totalCredits);
-      if (!Number.isInteger(tc) || tc < 1 || tc > 1000) {
+      if (hasScheduledItems && (!Number.isInteger(tc) || tc < 1 || tc > 1000)) {
         const err: any = new Error('Informe o limite total de aulas compartilhadas no período (>= 1).');
         err.status = 400;
         throw err;
       }
-      totalCredits = tc;
+      totalCredits = Number.isInteger(tc) && tc > 0 ? tc : 0;
     } else {
       totalCredits = validatedItems.reduce((sum, it) => sum + Number(it.includedCredits || 0), 0);
     }
@@ -266,6 +361,12 @@ export class PackageService {
     const { frequency: billingFrequency, cycleMonths } = billingType === 'recurring_monthly'
       ? normalizePeriodicFrequency(input.billingFrequency || 'monthly')
       : { frequency: 'monthly' as PeriodicBillingFrequency, cycleMonths: 1 };
+    const discountPercent = input.discountPercent !== undefined && input.discountPercent !== null && Number.isFinite(Number(input.discountPercent))
+      ? Math.max(0, Math.min(100, Math.round(Number(input.discountPercent) * 100) / 100))
+      : null;
+    const fidelityMonths = Math.max(0, Math.min(36, Math.floor(Number(input.fidelityMonths) || 0)));
+    const gracePeriodDays = Math.max(0, Math.min(90, Math.floor(Number(input.gracePeriodDays) || 0)));
+    const autoRenew = input.autoRenew ? 1 : 0;
 
     const packageId = 'pkg-' + uuidv4().slice(0, 8);
     db.transaction(() => {
@@ -274,20 +375,40 @@ export class PackageService {
           id, tenant_id, name, description, billing_type, billing_frequency, cycle_months, price, credit_mode,
           total_credits, weekly_limit, validity_days, installments_count, due_day,
           absent_consumption_policy, cancellation_hours_limit, allow_public_booking, active,
+          discount_percent, contract_duration_code, payment_periodicity, fidelity_months, grace_period_days, auto_renew,
           created_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `).run(
         packageId, tenantId, name, input.description ? String(input.description).trim() : null,
         billingType, billingFrequency, cycleMonths, price, creditMode, totalCredits, weeklyLimit, validityDays, installmentsCount,
-        dueDay, absentPolicy, cancelHours, allowPublic, active, createdBy
+        dueDay, absentPolicy, cancelHours, allowPublic, active,
+        discountPercent, input.contractDurationCode || null, input.paymentPeriodicity || null, fidelityMonths, gracePeriodDays, autoRenew,
+        createdBy
       );
 
       const insItem = db.prepare(`
-        INSERT INTO service_package_items (id, tenant_id, package_id, service_id, included_credits, weekly_frequency, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO service_package_items (
+          id, tenant_id, package_id, service_id, included_credits, weekly_frequency, sort_order,
+          item_type, access_mode, monthly_limit, is_mandatory, item_price, access_rules_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       validatedItems.forEach((it, idx) => {
-        insItem.run('pki-' + uuidv4().slice(0, 8), tenantId, packageId, it.serviceId, it.includedCredits, it.weeklyFrequency, idx);
+        insItem.run(
+          'pki-' + uuidv4().slice(0, 8),
+          tenantId,
+          packageId,
+          it.serviceId,
+          it.includedCredits,
+          it.weeklyFrequency,
+          idx,
+          it.itemType,
+          it.accessMode,
+          it.monthlyLimit,
+          it.isMandatory,
+          it.itemPrice,
+          it.accessRulesJson
+        );
       });
     })();
 
@@ -327,37 +448,97 @@ export class PackageService {
       let nextTotalCredits = Number(existing.total_credits || 0);
       if (Array.isArray(input.items) && input.items.length > 0) {
         const seen = new Set<string>();
-        const validated: Array<{ serviceId: string; includedCredits: number | null; weeklyFrequency: number | null }> = [];
+        const validated: Array<{
+          serviceId: string;
+          includedCredits: number | null;
+          weeklyFrequency: number | null;
+          monthlyLimit: number | null;
+          itemType: 'scheduled_service' | 'facility_access' | 'deliverable';
+          accessMode: 'unlimited' | 'limited' | null;
+          isMandatory: number;
+          itemPrice: number | null;
+          accessRulesJson: string | null;
+        }> = [];
         for (const rawItem of input.items) {
           const serviceId = String(rawItem.serviceId || '').trim();
           if (!serviceId || seen.has(serviceId)) continue;
           seen.add(serviceId);
-          const srv = db.prepare(`SELECT id FROM services WHERE id = ? AND tenant_id = ?`).get(serviceId, tenantId);
+          const srv = db.prepare(`SELECT id, studio_service_type, service_kind, access_config_json FROM services WHERE id = ? AND tenant_id = ?`).get(serviceId, tenantId) as any;
           if (!srv) {
             const err: any = new Error('Serviço inválido no catálogo deste estabelecimento.');
             err.status = 400;
             throw err;
           }
-          const inc = creditMode === 'per_service' ? Math.max(1, Math.floor(Number(rawItem.includedCredits) || 1)) : null;
+          const srvStudioType = normalizeStudioServiceType(srv.studio_service_type, srv.service_kind);
+          const itemType: 'scheduled_service' | 'facility_access' | 'deliverable' =
+            rawItem.itemType === 'facility_access' || rawItem.itemType === 'deliverable'
+              ? rawItem.itemType
+              : (srvStudioType === 'facility_access'
+                  ? 'facility_access'
+                  : (srvStudioType === 'non_scheduled' ? 'deliverable' : 'scheduled_service'));
           const wf = rawItem.weeklyFrequency ? Math.max(1, Math.min(14, Math.floor(Number(rawItem.weeklyFrequency)))) : null;
-          validated.push({ serviceId, includedCredits: inc, weeklyFrequency: wf });
+          const ml = rawItem.monthlyLimit ? Math.max(1, Math.min(200, Math.floor(Number(rawItem.monthlyLimit)))) : null;
+          let accessMode: 'unlimited' | 'limited' | null = null;
+          let inc: number | null = null;
+          if (itemType === 'facility_access') {
+            accessMode = rawItem.accessMode === 'limited' ? 'limited' : 'unlimited';
+            inc = accessMode === 'limited' && Number(rawItem.includedCredits) > 0 ? Math.floor(Number(rawItem.includedCredits)) : null;
+          } else {
+            inc = creditMode === 'per_service' || itemType === 'deliverable' ? Math.max(1, Math.floor(Number(rawItem.includedCredits) || 1)) : null;
+          }
+          const isMandatory = rawItem.isMandatory === false || rawItem.isMandatory === 0 ? 0 : 1;
+          const itemPrice = rawItem.itemPrice !== undefined && rawItem.itemPrice !== null && Number.isFinite(Number(rawItem.itemPrice)) && Number(rawItem.itemPrice) >= 0
+            ? Math.round(Number(rawItem.itemPrice) * 100) / 100
+            : null;
+          const accessRulesJson = rawItem.accessRules
+            ? JSON.stringify(normalizeStudioAccessConfig(rawItem.accessRules))
+            : (itemType === 'facility_access' && srv.access_config_json ? String(srv.access_config_json) : null);
+
+          validated.push({
+            serviceId,
+            includedCredits: inc,
+            weeklyFrequency: wf,
+            monthlyLimit: ml,
+            itemType,
+            accessMode,
+            isMandatory,
+            itemPrice,
+            accessRulesJson
+          });
         }
 
         if (validated.length > 0) {
           db.prepare(`DELETE FROM service_package_items WHERE package_id = ? AND tenant_id = ?`).run(packageId, tenantId);
           const insItem = db.prepare(`
-            INSERT INTO service_package_items (id, tenant_id, package_id, service_id, included_credits, weekly_frequency, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO service_package_items (
+              id, tenant_id, package_id, service_id, included_credits, weekly_frequency, sort_order,
+              item_type, access_mode, monthly_limit, is_mandatory, item_price, access_rules_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `);
           validated.forEach((it, idx) => {
-            insItem.run('pki-' + uuidv4().slice(0, 8), tenantId, packageId, it.serviceId, it.includedCredits, it.weeklyFrequency, idx);
+            insItem.run(
+              'pki-' + uuidv4().slice(0, 8),
+              tenantId,
+              packageId,
+              it.serviceId,
+              it.includedCredits,
+              it.weeklyFrequency,
+              idx,
+              it.itemType,
+              it.accessMode,
+              it.monthlyLimit,
+              it.isMandatory,
+              it.itemPrice,
+              it.accessRulesJson
+            );
           });
           nextTotalCredits = creditMode === 'shared_pool'
-            ? Math.max(1, Math.floor(Number(input.totalCredits ?? existing.total_credits ?? 1)))
+            ? Math.max(0, Math.floor(Number(input.totalCredits ?? existing.total_credits ?? 0)))
             : validated.reduce((sum, it) => sum + Number(it.includedCredits || 0), 0);
         }
       } else if (creditMode === 'shared_pool' && input.totalCredits !== undefined) {
-        nextTotalCredits = Math.max(1, Math.floor(Number(input.totalCredits)));
+        nextTotalCredits = Math.max(0, Math.floor(Number(input.totalCredits)));
       }
 
       const { frequency: nextBillingFreq, cycleMonths: nextCycleMonths } = billingType === 'recurring_monthly'
@@ -386,6 +567,12 @@ export class PackageService {
             cancellation_hours_limit = ?,
             allow_public_booking = ?,
             active = ?,
+            discount_percent = ?,
+            contract_duration_code = ?,
+            payment_periodicity = ?,
+            fidelity_months = ?,
+            grace_period_days = ?,
+            auto_renew = ?,
             updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `).run(
@@ -405,6 +592,12 @@ export class PackageService {
         input.cancellationHoursLimit !== undefined ? Math.max(0, Math.min(168, Number(input.cancellationHoursLimit))) : existing.cancellation_hours_limit,
         input.allowPublicBooking !== undefined ? (input.allowPublicBooking === false || input.allowPublicBooking === 0 ? 0 : 1) : existing.allow_public_booking,
         input.active !== undefined ? (input.active === false || input.active === 0 ? 0 : 1) : existing.active,
+        input.discountPercent !== undefined ? (input.discountPercent !== null ? Number(input.discountPercent) : null) : existing.discount_percent,
+        input.contractDurationCode !== undefined ? input.contractDurationCode : existing.contract_duration_code,
+        input.paymentPeriodicity !== undefined ? input.paymentPeriodicity : existing.payment_periodicity,
+        input.fidelityMonths !== undefined ? Math.max(0, Number(input.fidelityMonths) || 0) : (existing.fidelity_months || 0),
+        input.gracePeriodDays !== undefined ? Math.max(0, Number(input.gracePeriodDays) || 0) : (existing.grace_period_days || 0),
+        input.autoRenew !== undefined ? (input.autoRenew ? 1 : 0) : (existing.auto_renew || 0),
         packageId,
         tenantId
       );
@@ -431,18 +624,79 @@ export class PackageService {
       throw err;
     }
 
-    const pkgItems = db.prepare(`
-      SELECT spi.*, s.name as service_name, s.professional_id as service_professional_id
+    const rawPkgItems = db.prepare(`
+      SELECT
+        spi.*,
+        s.name as service_name,
+        s.professional_id as service_professional_id,
+        COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+        s.service_kind,
+        s.access_config_json
       FROM service_package_items spi
       JOIN services s ON s.id = spi.service_id AND s.tenant_id = spi.tenant_id
       WHERE spi.package_id = ? AND spi.tenant_id = ?
       ORDER BY spi.sort_order ASC
     `).all(pkg.id, input.tenantId) as any[];
 
-    if (pkgItems.length === 0) {
+    if (rawPkgItems.length === 0) {
       const err: any = new Error('Este pacote não possui serviços configurados.');
       err.status = 400;
       throw err;
+    }
+
+    const optionalSet = Array.isArray(input.optionalServiceIds)
+      ? new Set(input.optionalServiceIds.map(s => String(s).trim()))
+      : null;
+    const pkgItems = rawPkgItems.filter(it => {
+      if (Number(it.is_mandatory ?? 1) === 1) return true;
+      if (!optionalSet) return true;
+      return optionalSet.has(it.service_id);
+    });
+
+    if (pkgItems.length === 0) {
+      const err: any = new Error('Selecione ao menos um benefício válido do pacote.');
+      err.status = 400;
+      throw err;
+    }
+
+    const includesAccessBenefit = pkgItems.some(it =>
+      it.item_type === 'facility_access' ||
+      normalizeStudioServiceType(it.studio_service_type, it.service_kind) === 'facility_access'
+    );
+
+    if (includesAccessBenefit && !input.allowDuplicateAccessBenefit && input.origin !== 'public_booking') {
+      const todayCheck = getTodayIso();
+      const existingActiveAccessPlan = db.prepare(`
+        SELECT rbp.id, rbp.title
+        FROM recurring_billing_plans rbp
+        LEFT JOIN services s ON s.id = rbp.service_id AND s.tenant_id = rbp.tenant_id
+        WHERE rbp.tenant_id = ? AND rbp.patient_id = ? AND rbp.status = 'active'
+          AND (rbp.end_date IS NULL OR rbp.end_date >= ?)
+          AND (rbp.contract_kind = 'access_plan' OR s.studio_service_type = 'facility_access')
+        LIMIT 1
+      `).get(input.tenantId, input.studentId, todayCheck) as any;
+
+      const existingActiveAccessPkg = !existingActiveAccessPlan
+        ? db.prepare(`
+            SELECT spc.id, spc.package_name_snapshot as title
+            FROM student_package_contracts spc
+            JOIN student_package_entitlements spe ON spe.contract_id = spc.id AND spe.tenant_id = spc.tenant_id
+            WHERE spc.tenant_id = ? AND spc.student_id = ? AND spc.contract_status = 'active'
+              AND (spc.end_date IS NULL OR spc.end_date >= ?)
+              AND spe.entitlement_type = 'facility_access'
+            LIMIT 1
+          `).get(input.tenantId, input.studentId, todayCheck)
+        : null;
+
+      const activeAccessConflict = existingActiveAccessPlan || existingActiveAccessPkg;
+      if (activeAccessConflict) {
+        const err: any = new Error(
+          `O aluno já possui um plano de acesso à academia ativo ("${activeAccessConflict.title}"). Confirme explicitamente a regra comercial (allowDuplicateAccessBenefit) para evitar duplicação de benefício.`
+        );
+        err.status = 409;
+        err.code = 'DUPLICATE_ACTIVE_ACCESS_BENEFIT';
+        throw err;
+      }
     }
 
     const origin = input.origin === 'public_booking' ? 'public_booking' : 'admin';
@@ -550,13 +804,55 @@ export class PackageService {
     const insEnt = db.prepare(`
       INSERT INTO student_package_entitlements (
         id, tenant_id, contract_id, service_id, service_name_snapshot,
-        allowed_service_ids_json, weekly_frequency_snapshot, credits_total, credits_reserved, credits_used
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+        allowed_service_ids_json, weekly_frequency_snapshot, credits_total, credits_reserved, credits_used,
+        entitlement_type, access_mode_snapshot, monthly_limit_snapshot, access_rules_snapshot_json, entries_used
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, 0)
     `);
 
-    if (pkg.credit_mode === 'shared_pool') {
-      const allowedIds = pkgItems.map(it => it.service_id);
-      const serviceNamesLabel = pkgItems.map(it => it.service_name).join(' + ');
+    const resolvedItemsWithTypes = pkgItems.map(item => {
+      const st = normalizeStudioServiceType(item.studio_service_type, item.service_kind);
+      const entType: 'scheduled_service' | 'facility_access' | 'deliverable' =
+        item.item_type === 'facility_access' || item.item_type === 'deliverable'
+          ? item.item_type
+          : (st === 'facility_access' ? 'facility_access' : (st === 'non_scheduled' ? 'deliverable' : 'scheduled_service'));
+      const accessModeSnap =
+        entType === 'facility_access'
+          ? (item.access_mode === 'limited' ? 'limited' : (Number(item.included_credits || 0) > 0 || Number(item.weekly_frequency || 0) > 0 || Number(item.monthly_limit || 0) > 0 ? 'limited' : 'unlimited'))
+          : null;
+      return {
+        ...item,
+        entType,
+        accessModeSnap,
+        accessRulesSnap: item.access_rules_json || item.access_config_json || null
+      };
+    });
+
+    const nonPoolItems = resolvedItemsWithTypes.filter(it => it.entType !== 'scheduled_service');
+    const scheduledItems = resolvedItemsWithTypes.filter(it => it.entType === 'scheduled_service');
+
+    // Benefícios de acesso livre/limitado e entregáveis possuem controle independente (nunca consomem o pool de aulas agendadas!)
+    for (const item of nonPoolItems) {
+      insEnt.run(
+        'ent-' + uuidv4().slice(0, 8),
+        input.tenantId,
+        contractId,
+        item.service_id,
+        item.service_name,
+        JSON.stringify([item.service_id]),
+        item.weekly_frequency ?? null,
+        item.entType === 'facility_access' && item.accessModeSnap === 'unlimited'
+          ? 0
+          : Number(item.included_credits || (item.entType === 'deliverable' ? 1 : 0)),
+        item.entType,
+        item.accessModeSnap,
+        item.monthly_limit ?? null,
+        item.accessRulesSnap
+      );
+    }
+
+    if (pkg.credit_mode === 'shared_pool' && scheduledItems.length > 0) {
+      const allowedIds = scheduledItems.map(it => it.service_id);
+      const serviceNamesLabel = scheduledItems.map(it => it.service_name).join(' + ');
       insEnt.run(
         'ent-' + uuidv4().slice(0, 8),
         input.tenantId,
@@ -565,10 +861,14 @@ export class PackageService {
         `Pool Compartilhado (${serviceNamesLabel})`,
         JSON.stringify(allowedIds),
         pkg.weekly_limit ?? null,
-        Number(pkg.total_credits || 0)
+        Number(pkg.total_credits || 0),
+        'scheduled_service',
+        null,
+        null,
+        null
       );
     } else {
-      for (const item of pkgItems) {
+      for (const item of scheduledItems) {
         insEnt.run(
           'ent-' + uuidv4().slice(0, 8),
           input.tenantId,
@@ -577,7 +877,11 @@ export class PackageService {
           item.service_name,
           JSON.stringify([item.service_id]),
           item.weekly_frequency ?? null,
-          Number(item.included_credits || 0)
+          Number(item.included_credits || 0),
+          'scheduled_service',
+          null,
+          null,
+          null
         );
       }
     }
@@ -671,11 +975,17 @@ export class PackageService {
       try {
         if (e.allowed_service_ids_json) allowedServiceIds = JSON.parse(e.allowed_service_ids_json);
       } catch (_) {}
-      const remaining = Math.max(0, Number(e.credits_total || 0) - Number(e.credits_reserved || 0) - Number(e.credits_used || 0));
+      const entType = e.entitlement_type || 'scheduled_service';
+      const isUnlimitedAccess = entType === 'facility_access' && e.access_mode_snapshot === 'unlimited';
+      const remaining = isUnlimitedAccess
+        ? null
+        : Math.max(0, Number(e.credits_total || 0) - Number(e.credits_reserved || 0) - Number(e.credits_used || 0));
       return {
         ...e,
+        entitlement_type: entType,
         allowed_service_ids: allowedServiceIds,
-        credits_remaining: remaining
+        credits_remaining: remaining,
+        access_rules: e.access_rules_snapshot_json ? normalizeStudioAccessConfig(e.access_rules_snapshot_json) : null
       };
     });
 
@@ -686,9 +996,13 @@ export class PackageService {
       ORDER BY due_date ASC, created_at ASC
     `).all(contractId, tenantId) as any[];
 
-    const totalCredits = entitlements.reduce((s, e) => s + Number(e.credits_total || 0), 0);
-    const totalReserved = entitlements.reduce((s, e) => s + Number(e.credits_reserved || 0), 0);
-    const totalUsed = entitlements.reduce((s, e) => s + Number(e.credits_used || 0), 0);
+    const scheduledEntitlements = entitlements.filter(e => e.entitlement_type !== 'facility_access');
+    const totalCredits = scheduledEntitlements.reduce((s, e) => s + Number(e.credits_total || 0), 0);
+    const totalReserved = scheduledEntitlements.reduce((s, e) => s + Number(e.credits_reserved || 0), 0);
+    const totalUsed = scheduledEntitlements.reduce((s, e) => s + Number(e.credits_used || 0), 0);
+    const totalAccessEntries = entitlements
+      .filter(e => e.entitlement_type === 'facility_access')
+      .reduce((s, e) => s + Number(e.entries_used || 0), 0);
 
     return {
       ...contract,
@@ -698,9 +1012,65 @@ export class PackageService {
         creditsTotal: totalCredits,
         creditsReserved: totalReserved,
         creditsUsed: totalUsed,
-        creditsRemaining: Math.max(0, totalCredits - totalReserved - totalUsed)
+        creditsRemaining: Math.max(0, totalCredits - totalReserved - totalUsed),
+        accessEntriesUsed: totalAccessEntries,
+        hasUnlimitedAccess: entitlements.some(e => e.entitlement_type === 'facility_access' && e.access_mode_snapshot === 'unlimited')
       }
     };
+  }
+
+  /**
+   * Registra a entrega de um benefício não agendável (ex.: Entrega de treino) sem gerar agendamento fictício na agenda.
+   */
+  static deliverPackageEntitlementTx(params: {
+    tenantId: string;
+    contractId: string;
+    entitlementId: string;
+    deliveredBy: string;
+    notes?: string;
+  }): any {
+    const ent = db.prepare(`
+      SELECT * FROM student_package_entitlements WHERE id = ? AND contract_id = ? AND tenant_id = ?
+    `).get(params.entitlementId, params.contractId, params.tenantId) as any;
+
+    if (!ent) {
+      const err: any = new Error('Benefício não encontrado neste contrato.');
+      err.status = 404;
+      throw err;
+    }
+
+    const remaining = Number(ent.credits_total || 0) - Number(ent.credits_reserved || 0) - Number(ent.credits_used || 0);
+    if (remaining < 1) {
+      const err: any = new Error('Este benefício já foi integralmente entregue.');
+      err.status = 409;
+      err.code = 'ENTITLEMENT_ALREADY_DELIVERED';
+      throw err;
+    }
+
+    db.prepare(`
+      UPDATE student_package_entitlements
+      SET credits_used = credits_used + 1,
+          delivered_at = datetime('now'),
+          delivered_by = ?,
+          updated_at = datetime('now')
+      WHERE id = ? AND tenant_id = ?
+    `).run(params.deliveredBy, ent.id, params.tenantId);
+
+    db.prepare(`
+      INSERT INTO package_usage_ledger (
+        id, tenant_id, contract_id, entitlement_id, appointment_id, action,
+        delta_reserved, delta_used, notes, created_by
+      ) VALUES (?, ?, ?, ?, NULL, 'consume', 0, 1, ?, ?)
+    `).run(
+      'plg-' + uuidv4().slice(0, 8),
+      params.tenantId,
+      params.contractId,
+      ent.id,
+      params.notes || `Entrega de serviço não agendável: ${ent.service_name_snapshot}`,
+      params.deliveredBy
+    );
+
+    return this.getContractById(params.tenantId, params.contractId);
   }
 
   static listContracts(tenantId: string, filters?: { studentId?: string; status?: string; professionalId?: string }): any[] {

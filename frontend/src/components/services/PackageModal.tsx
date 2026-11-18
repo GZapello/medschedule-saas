@@ -12,6 +12,8 @@ interface PackageItemDraft {
   selected: boolean;
   includedCredits: number;
   weeklyFrequency: string;
+  accessMode: 'unlimited' | 'limited';
+  itemPrice: string;
 }
 
 interface PackageModalProps {
@@ -62,8 +64,10 @@ export const PackageModal: React.FC<PackageModalProps> = ({
       initialMap[s.id] = {
         serviceId: s.id,
         selected: false,
-        includedCredits: 4,
-        weeklyFrequency: ''
+        includedCredits: s.studio_service_type === 'facility_access' ? 0 : (s.studio_service_type === 'non_scheduled' ? 1 : 4),
+        weeklyFrequency: '',
+        accessMode: s.access_config?.accessMode === 'limited' ? 'limited' : 'unlimited',
+        itemPrice: ''
       };
     }
 
@@ -95,7 +99,9 @@ export const PackageModal: React.FC<PackageModalProps> = ({
               serviceId: it.service_id,
               selected: true,
               includedCredits: Number(it.included_credits || 4),
-              weeklyFrequency: it.weekly_frequency ? String(it.weekly_frequency) : ''
+              weeklyFrequency: it.weekly_frequency ? String(it.weekly_frequency) : '',
+              accessMode: it.access_mode === 'limited' ? 'limited' : 'unlimited',
+              itemPrice: it.item_price !== undefined && it.item_price !== null ? String(it.item_price) : ''
             };
           }
         }
@@ -126,8 +132,15 @@ export const PackageModal: React.FC<PackageModalProps> = ({
   const profNameById = new Map<string, string>();
   professionals.forEach(p => profNameById.set(p.id, p.name));
 
+  const srvById = new Map<string, Service>();
+  services.forEach(s => srvById.set(s.id, s));
+
   const selectedItems = Object.values(itemMap).filter(i => i.selected);
-  const perServiceComputedTotal = selectedItems.reduce((sum, it) => sum + (Number(it.includedCredits) || 0), 0);
+  const perServiceComputedTotal = selectedItems.reduce((sum, it) => {
+    const srv = srvById.get(it.serviceId);
+    if (srv?.studio_service_type === 'facility_access') return sum;
+    return sum + (Number(it.includedCredits) || 0);
+  }, 0);
 
   const toggleService = (serviceId: string) => {
     setItemMap(prev => ({
@@ -139,7 +152,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
     }));
   };
 
-  const updateItemField = (serviceId: string, field: 'includedCredits' | 'weeklyFrequency', val: any) => {
+  const updateItemField = (serviceId: string, field: keyof PackageItemDraft, val: any) => {
     setItemMap(prev => ({
       ...prev,
       [serviceId]: {
@@ -166,8 +179,10 @@ export const PackageModal: React.FC<PackageModalProps> = ({
     }
     if (creditMode === 'per_service') {
       for (const it of selectedItems) {
+        const srv = srvById.get(it.serviceId);
+        if (srv?.studio_service_type === 'facility_access') continue;
         if (!Number.isInteger(Number(it.includedCredits)) || Number(it.includedCredits) < 1) {
-          showToast('Informe a quantidade de aulas (>= 1) para cada modalidade selecionada.', 'error');
+          showToast('Informe a quantidade de aulas (>= 1) para cada modalidade agendável selecionada.', 'error');
           return;
         }
       }
@@ -192,11 +207,19 @@ export const PackageModal: React.FC<PackageModalProps> = ({
       cancellationHoursLimit: Number(cancelHoursLimit) || 0,
       allowPublicBooking,
       active,
-      items: selectedItems.map(it => ({
-        serviceId: it.serviceId,
-        includedCredits: creditMode === 'per_service' ? Number(it.includedCredits) : null,
-        weeklyFrequency: it.weeklyFrequency ? Number(it.weeklyFrequency) : null
-      }))
+      items: selectedItems.map(it => {
+        const srv = srvById.get(it.serviceId);
+        const isAccess = srv?.studio_service_type === 'facility_access';
+        const isDeliverable = srv?.studio_service_type === 'non_scheduled';
+        return {
+          serviceId: it.serviceId,
+          itemType: isAccess ? 'facility_access' : (isDeliverable ? 'deliverable' : 'scheduled_service'),
+          accessMode: isAccess ? it.accessMode : 'none',
+          includedCredits: isAccess ? null : (creditMode === 'per_service' ? Number(it.includedCredits) : null),
+          weeklyFrequency: it.weeklyFrequency ? Number(it.weeklyFrequency) : null,
+          itemPrice: it.itemPrice && Number(String(it.itemPrice).replace(',', '.')) >= 0 ? Number(String(it.itemPrice).replace(',', '.')) : null
+        };
+      })
     };
 
     try {
@@ -483,8 +506,10 @@ export const PackageModal: React.FC<PackageModalProps> = ({
             ) : (
               <div className={isPureStudio ? "space-y-2" : "space-y-2 max-h-60 overflow-y-auto pr-1"}>
                 {services.map(srv => {
-                  const draft = itemMap[srv.id] || { serviceId: srv.id, selected: false, includedCredits: 4, weeklyFrequency: '' };
+                  const draft = itemMap[srv.id] || { serviceId: srv.id, selected: false, includedCredits: 4, weeklyFrequency: '', accessMode: 'unlimited', itemPrice: '' };
                   const profName = srv.professional_id ? profNameById.get(srv.professional_id) : null;
+                  const isAccess = srv.studio_service_type === 'facility_access';
+                  const isDeliverable = srv.studio_service_type === 'non_scheduled';
                   return (
                     <div
                       key={srv.id}
@@ -502,17 +527,53 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                         <div className="min-w-0">
                           <div className={`font-bold text-slate-900 ${isPureStudio ? "break-words" : "truncate"}`}>{srv.name}</div>
                           <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-2">
-                            <span>{srv.duration_minutes} min</span>
-                            {srv.service_kind === 'group' && <span className="text-teal-700 font-semibold">Turma ({srv.default_capacity || 1} vagas)</span>}
+                            {isAccess ? (
+                              <span className="text-indigo-700 font-semibold">Plano de Acesso (Catraca / Sem agenda)</span>
+                            ) : isDeliverable ? (
+                              <span className="text-amber-700 font-semibold">Benefício Entregável (Sem agenda)</span>
+                            ) : (
+                              <span>{srv.duration_minutes} min</span>
+                            )}
+                            {srv.service_kind === 'group' && !isAccess && <span className="text-teal-700 font-semibold">Turma ({srv.default_capacity || 1} vagas)</span>}
                             {profName && <span className="text-slate-600 font-medium">Instrutor: {profName}</span>}
                           </div>
                         </div>
                       </label>
 
-                      {draft.selected && creditMode === 'per_service' && (
+                      {draft.selected && isAccess && (
                         <div className="flex items-center gap-2 shrink-0 pl-6 sm:pl-0">
                           <div>
-                            <label className="block text-[10px] font-semibold text-slate-500">Qtd. aulas</label>
+                            <label className="block text-[10px] font-semibold text-slate-500">Modo de acesso</label>
+                            <select
+                              value={draft.accessMode}
+                              onChange={e => updateItemField(srv.id, 'accessMode', e.target.value)}
+                              className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold bg-white"
+                            >
+                              <option value="unlimited">Livre (Ilimitado)</option>
+                              <option value="limited">Limitado por semana</option>
+                            </select>
+                          </div>
+                          {draft.accessMode === 'limited' && (
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-500">Por semana</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="14"
+                                placeholder="3"
+                                value={draft.weeklyFrequency}
+                                onChange={e => updateItemField(srv.id, 'weeklyFrequency', e.target.value)}
+                                className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center bg-white"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {draft.selected && !isAccess && creditMode === 'per_service' && (
+                        <div className="flex items-center gap-2 shrink-0 pl-6 sm:pl-0">
+                          <div>
+                            <label className="block text-[10px] font-semibold text-slate-500">{isDeliverable ? 'Entregas' : 'Qtd. aulas'}</label>
                             <input
                               type="number"
                               min="1"
@@ -524,19 +585,21 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                               className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-center bg-white"
                             />
                           </div>
-                          <div>
-                            <label className="block text-[10px] font-semibold text-slate-500">Por semana</label>
-                            <input
-                              type="number"
-                              min="1"
-                              max="14"
-                              placeholder="-"
-                              aria-label={isPureStudio ? `Aulas por semana de ${srv.name}` : undefined}
-                              value={draft.weeklyFrequency}
-                              onChange={e => updateItemField(srv.id, 'weeklyFrequency', e.target.value)}
-                              className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center bg-white"
-                            />
-                          </div>
+                          {!isDeliverable && (
+                            <div>
+                              <label className="block text-[10px] font-semibold text-slate-500">Por semana</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="14"
+                                placeholder="-"
+                                aria-label={isPureStudio ? `Aulas por semana de ${srv.name}` : undefined}
+                                value={draft.weeklyFrequency}
+                                onChange={e => updateItemField(srv.id, 'weeklyFrequency', e.target.value)}
+                                className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center bg-white"
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

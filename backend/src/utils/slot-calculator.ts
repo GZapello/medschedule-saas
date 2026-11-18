@@ -112,6 +112,8 @@ export function calculateAvailableSlots(
            s.buffer_minutes, s.min_lead_time_hours, s.max_advance_days, s.active,
            s.modality, COALESCE(s.service_kind, 'individual') AS service_kind, s.default_capacity,
            s.service_domain, s.clinical_module,
+           COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) AS studio_service_type,
+           COALESCE(s.requires_appointment, 1) AS requires_appointment,
            COALESCE(s.availability_mode, 'professional_schedule') AS availability_mode
     FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
     WHERE s.id = ? AND s.tenant_id = ? AND s.active = 1
@@ -126,13 +128,20 @@ export function calculateAvailableSlots(
     default_capacity: number | null;
     service_domain?: string | null;
     clinical_module?: string | null;
+    studio_service_type?: string | null;
+    requires_appointment?: number | null;
     availability_mode?: string | null;
   } | undefined;
 
   if (!service) return [];
+  if (
+    Number(service.requires_appointment ?? 1) === 0 ||
+    service.studio_service_type === 'facility_access' ||
+    service.studio_service_type === 'non_scheduled'
+  ) {
+    return [];
+  }
 
-  const isGroupService = service.service_kind === 'group';
-  const defaultGroupCapacity = isGroupService ? Math.max(1, Number(service.default_capacity) || 1) : 1;
   const estProfile = getTenantEstablishmentProfile(tenantId);
   const resolvedServiceDomain = resolveServiceDomain({
     establishmentProfile: estProfile,
@@ -140,6 +149,13 @@ export function calculateAvailableSlots(
     serviceKind: service.service_kind,
     clinicalModule: service.clinical_module
   });
+  const isSharedCapacityStudio =
+    supportsStudioFeatures(estProfile) &&
+    resolvedServiceDomain === 'studio' &&
+    Number(service.default_capacity) >= 2 &&
+    service.studio_service_type !== 'facility_access';
+  const isGroupService = service.service_kind === 'group' || isSharedCapacityStudio;
+  const defaultGroupCapacity = isGroupService ? Math.max(1, Number(service.default_capacity) || 1) : 1;
   const useCustomServiceWindows =
     !isGroupService &&
     supportsStudioFeatures(estProfile) &&

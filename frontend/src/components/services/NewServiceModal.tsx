@@ -14,6 +14,16 @@ import { ServiceBillingConfigPanel, ServicePackageOption } from './ServiceBillin
 import { StudioPricingRule } from '../../utils/studioPricing';
 import { ServiceTemplatesConfigPanel } from './ServiceTemplatesConfigPanel';
 import { LinkedInstructorsSelector } from './LinkedInstructorsSelector';
+import { StudioAccessAndAdjustmentsPanel } from './StudioAccessAndAdjustmentsPanel';
+import {
+  DEFAULT_STUDIO_ACCESS_CONFIG,
+  normalizeStudioAccessConfig,
+  normalizeStudioPriceAdjustments,
+  normalizeStudioServiceType,
+  StudioAccessConfig,
+  StudioPriceAdjustmentRule,
+  StudioServiceType
+} from '../../utils/studioAccessAndCommercial';
 import {
   ALL_PLAN_DURATIONS,
   isMixedProfile,
@@ -66,6 +76,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const [modality, setModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
   const [serviceDomain, setServiceDomain] = useState<ServiceDomain>(isPureStudio ? 'studio' : 'clinical');
   const [serviceKind, setServiceKind] = useState<'individual' | 'group'>('individual');
+  const [studioServiceType, setStudioServiceType] = useState<StudioServiceType>('individual');
+  const [accessConfig, setAccessConfig] = useState<StudioAccessConfig>(DEFAULT_STUDIO_ACCESS_CONFIG);
+  const [pricingAdjustments, setPricingAdjustments] = useState<StudioPriceAdjustmentRule[]>([]);
+  const [allowPublicBooking, setAllowPublicBooking] = useState<boolean>(true);
   const [defaultCapacity, setDefaultCapacity] = useState<number>(10);
   const [allowRecurrence, setAllowRecurrence] = useState<boolean>(true);
   const [allowedFrequencies, setAllowedFrequencies] = useState<RecurrenceFrequency[]>(['weekly']);
@@ -160,7 +174,14 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setBufferMinutes(Number(serviceToEdit.buffer_minutes) || 0);
         setModality((serviceToEdit.modality as any) || 'both');
         setServiceDomain(domain);
-        setServiceKind(domain === 'studio' && serviceToEdit.service_kind === 'group' ? 'group' : 'individual');
+        const resolvedStudioType = domain === 'studio'
+          ? normalizeStudioServiceType(serviceToEdit.studio_service_type, serviceToEdit.service_kind)
+          : 'individual';
+        setStudioServiceType(resolvedStudioType);
+        setServiceKind(domain === 'studio' && (serviceToEdit.service_kind === 'group' || resolvedStudioType === 'group') ? 'group' : 'individual');
+        setAccessConfig(normalizeStudioAccessConfig(serviceToEdit.access_config));
+        setPricingAdjustments(normalizeStudioPriceAdjustments(serviceToEdit.pricing_adjustments));
+        setAllowPublicBooking(serviceToEdit.allow_public_booking !== 0 && serviceToEdit.allow_public_booking !== false);
         setDefaultCapacity(Number(serviceToEdit.default_capacity) || 10);
         setAllowRecurrence(recCfg.allowRecurrence);
         setAllowedFrequencies(
@@ -208,6 +229,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setModality('both');
         setServiceDomain(isPureStudio ? 'studio' : 'clinical');
         setServiceKind('individual');
+        setStudioServiceType('individual');
+        setAccessConfig(DEFAULT_STUDIO_ACCESS_CONFIG);
+        setPricingAdjustments([]);
+        setAllowPublicBooking(true);
         setDefaultCapacity(10);
         setAllowRecurrence(true);
         setAllowedFrequencies(['weekly']);
@@ -270,7 +295,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       showToast('O nome do serviço é obrigatório', 'error');
       return;
     }
-    if (!professionalId) {
+    const requiresAppointment = !showStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled');
+    if (!professionalId && requiresAppointment) {
       showToast('Selecione o profissional responsável', 'error');
       return;
     }
@@ -317,7 +343,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
 
     try {
       setLoading(true);
-      const effectiveKind = showStudioConfig ? serviceKind : 'individual';
+      const effectiveKind = showStudioConfig ? (studioServiceType === 'group' ? 'group' : 'individual') : 'individual';
       const normalizedLinkedIds = showStudioConfig
         ? Array.from(new Set([professionalId, ...linkedProfessionalIds].filter(Boolean)))
         : [professionalId];
@@ -327,7 +353,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         (!isEditing || serviceToEdit?.service_kind !== 'group') &&
         draftSchedules.length > 0;
       const payload: any = {
-        professionalId,
+        professionalId: professionalId || null,
         ...(showStudioConfig ? { linkedProfessionalIds: normalizedLinkedIds } : {}),
         name: name.trim(),
         price: numPrice,
@@ -340,6 +366,11 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         ...(isStudioCompatible ? { serviceDomain: showStudioConfig ? 'studio' : 'clinical' } : {}),
         ...(showStudioConfig
           ? {
+              studioServiceType,
+              requiresAppointment,
+              allowPublicBooking,
+              accessConfig: studioServiceType === 'facility_access' ? accessConfig : null,
+              pricingAdjustments,
               allowedRecurrenceFrequencies: allowRecurrence ? allowedFrequencies : [],
               allowedRecurrenceWeekdays:
                 allowRecurrence
@@ -431,7 +462,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5">
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
-              Profissional Responsável <span className="text-rose-500">*</span>
+              Profissional Responsável{' '}
+              {showStudioConfig && (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled') ? (
+                <span className="text-slate-400 font-normal">(Opcional — plano de acesso livre/entregável)</span>
+              ) : (
+                <span className="text-rose-500">*</span>
+              )}
             </label>
             <select
               value={professionalId}
@@ -443,9 +479,13 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 }
               }}
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-              required
+              required={!showStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')}
             >
-              <option value="">Selecione o profissional...</option>
+              <option value="">
+                {showStudioConfig && (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled')
+                  ? 'Sem profissional específico (Geral da Academia & Studio)'
+                  : 'Selecione o profissional...'}
+              </option>
               {professionals.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.name} {p.profession_name ? `(${p.profession_name})` : ''}
@@ -453,7 +493,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               ))}
             </select>
 
-            {showStudioConfig && (
+            {showStudioConfig && studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
               <div className="mt-2">
                 <LinkedInstructorsSelector
                   professionals={professionals}
@@ -565,33 +605,60 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
               <div className="font-bold text-slate-800 flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-teal-600" />
-                Configurações do Studio
+                Configurações de Academia &amp; Studio
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setServiceKind('individual')}
-                  className={`px-3 py-2 rounded-xl border text-left font-semibold transition-all cursor-pointer ${
-                    serviceKind === 'individual'
-                      ? 'border-teal-600 bg-teal-50 text-teal-800'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  Individual
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setServiceKind('group')}
-                  className={`px-3 py-2 rounded-xl border text-left font-semibold transition-all cursor-pointer ${
-                    serviceKind === 'group'
-                      ? 'border-teal-600 bg-teal-50 text-teal-800'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  Aula coletiva / Turma
-                </button>
-              </div>
-              {serviceKind === 'group' && (
+              <StudioAccessAndAdjustmentsPanel
+                studioServiceType={studioServiceType}
+                onStudioServiceTypeChange={nextType => {
+                  setStudioServiceType(nextType);
+                  setServiceKind(nextType === 'group' ? 'group' : 'individual');
+                  if (nextType === 'facility_access' && billingMode === 'per_session') {
+                    setBillingMode('monthly');
+                    if (!periodicPrice) setPeriodicPrice(price || '150');
+                  }
+                }}
+                accessConfig={accessConfig}
+                onAccessConfigChange={setAccessConfig}
+                pricingAdjustments={pricingAdjustments}
+                onPricingAdjustmentsChange={setPricingAdjustments}
+                defaultCapacity={defaultCapacity}
+                onDefaultCapacityChange={setDefaultCapacity}
+                allowPublicBooking={allowPublicBooking}
+                onAllowPublicBookingChange={setAllowPublicBooking}
+              />
+              {studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setServiceKind('individual');
+                      setStudioServiceType('individual');
+                    }}
+                    className={`px-3 py-2 rounded-xl border text-left font-semibold transition-all cursor-pointer ${
+                      serviceKind === 'individual'
+                        ? 'border-teal-600 bg-teal-50 text-teal-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Individual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setServiceKind('group');
+                      setStudioServiceType('group');
+                    }}
+                    className={`px-3 py-2 rounded-xl border text-left font-semibold transition-all cursor-pointer ${
+                      serviceKind === 'group'
+                        ? 'border-teal-600 bg-teal-50 text-teal-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    Aula coletiva / Turma
+                  </button>
+                </div>
+              )}
+              {studioServiceType === 'group' && serviceKind === 'group' && (
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     Vagas por aula/turma <span className="text-rose-500">*</span>
@@ -608,7 +675,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   />
                 </div>
               )}
-              {serviceKind === 'group' && (
+              {studioServiceType === 'group' && serviceKind === 'group' && (
                 <ClassScheduleSection
                   serviceId={isEditing && serviceToEdit?.service_kind === 'group' ? serviceToEdit.id : null}
                   serviceModality={modality}
@@ -623,49 +690,51 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   onFormOpenChange={setHasPendingScheduleForm}
                 />
               )}
-              <ServiceRecurrenceConfigPanel
-                allowRecurrence={allowRecurrence}
-                allowedFrequencies={allowedFrequencies}
-                allowedWeekdays={allowedWeekdays}
-                defaultFrequency={defaultFrequency}
-                customIntervals={customIntervals}
-                defaultCustomInterval={defaultCustomInterval}
-                allowedPlanDurations={allowedPlanDurations}
-                defaultPlanDuration={defaultPlanDuration}
-                serviceKind={serviceKind}
-                scheduledWeekdays={
-                  serviceKind === 'group'
-                    ? Array.from(new Set(groupWeeklyMeetings.map(m => m.weekday))).sort((a, b) => a - b)
-                    : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
-                }
-                individualAvailabilitySlot={
-                  serviceKind === 'individual' ? (
-                    <ServiceAvailabilitySection
-                      mode={availabilityMode}
-                      windows={availabilityWindows}
-                      schedules={professionalSchedules}
-                      schedulesLoading={professionalSchedulesLoading}
-                      allowedWeekdays={allowedWeekdays}
-                      restrictWeekdays={allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0}
-                      diagnostics={isEditing ? serviceToEdit?.availability_diagnostics : null}
-                      defaultProfessionalId={professionalId}
-                      onModeChange={setAvailabilityMode}
-                      onWindowsChange={setAvailabilityWindows}
-                      testIdPrefix="modal-service-availability"
-                    />
-                  ) : null
-                }
-                onChange={next => {
-                  setAllowRecurrence(next.allowRecurrence);
-                  setAllowedFrequencies(next.allowedFrequencies);
-                  setAllowedWeekdays(next.allowedWeekdays);
-                  setDefaultFrequency(next.defaultFrequency);
-                  setCustomIntervals(next.customIntervals);
-                  setDefaultCustomInterval(next.defaultCustomInterval);
-                  setAllowedPlanDurations(next.allowedPlanDurations);
-                  setDefaultPlanDuration(next.defaultPlanDuration);
-                }}
-              />
+              {studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
+                <ServiceRecurrenceConfigPanel
+                  allowRecurrence={allowRecurrence}
+                  allowedFrequencies={allowedFrequencies}
+                  allowedWeekdays={allowedWeekdays}
+                  defaultFrequency={defaultFrequency}
+                  customIntervals={customIntervals}
+                  defaultCustomInterval={defaultCustomInterval}
+                  allowedPlanDurations={allowedPlanDurations}
+                  defaultPlanDuration={defaultPlanDuration}
+                  serviceKind={serviceKind}
+                  scheduledWeekdays={
+                    serviceKind === 'group'
+                      ? Array.from(new Set(groupWeeklyMeetings.map(m => m.weekday))).sort((a, b) => a - b)
+                      : Array.from(new Set(individualMeetings.map(m => m.weekday))).sort((a, b) => a - b)
+                  }
+                  individualAvailabilitySlot={
+                    serviceKind === 'individual' ? (
+                      <ServiceAvailabilitySection
+                        mode={availabilityMode}
+                        windows={availabilityWindows}
+                        schedules={professionalSchedules}
+                        schedulesLoading={professionalSchedulesLoading}
+                        allowedWeekdays={allowedWeekdays}
+                        restrictWeekdays={allowRecurrence && allowedFrequencies.includes('custom_weekdays') && allowedWeekdays.length > 0}
+                        diagnostics={isEditing ? serviceToEdit?.availability_diagnostics : null}
+                        defaultProfessionalId={professionalId}
+                        onModeChange={setAvailabilityMode}
+                        onWindowsChange={setAvailabilityWindows}
+                        testIdPrefix="modal-service-availability"
+                      />
+                    ) : null
+                  }
+                  onChange={next => {
+                    setAllowRecurrence(next.allowRecurrence);
+                    setAllowedFrequencies(next.allowedFrequencies);
+                    setAllowedWeekdays(next.allowedWeekdays);
+                    setDefaultFrequency(next.defaultFrequency);
+                    setCustomIntervals(next.customIntervals);
+                    setDefaultCustomInterval(next.defaultCustomInterval);
+                    setAllowedPlanDurations(next.allowedPlanDurations);
+                    setDefaultPlanDuration(next.defaultPlanDuration);
+                  }}
+                />
+              )}
               <ServiceBillingConfigPanel
                 compact
                 serviceName={name}
@@ -678,7 +747,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 weeklySessionsCount={weeklySessionsCount}
                 allowFrequencyPricing={showStudioConfig}
                 frequencyPricing={frequencyPricing} onFrequencyPricingChange={setFrequencyPricing}
-                offeredWeeklySessions={contractableWeeklySessions}
+                offeredWeeklySessions={studioServiceType === 'facility_access' ? 7 : contractableWeeklySessions}
                 includedSessionsCount={includedSessionsCount}
                 defaultPackageId={defaultPackageId}
                 defaultBillingDueDay={defaultBillingDueDay}
@@ -698,15 +767,17 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                   setDefaultBillingDueDay(next.defaultBillingDueDay);
                 }}
               />
-              <ServiceTemplatesConfigPanel
-                compact
-                defaultTemplateId={defaultTemplateId}
-                linkedTemplateIds={linkedTemplateIds}
-                onChange={next => {
-                  setDefaultTemplateId(next.defaultTemplateId);
-                  setLinkedTemplateIds(next.linkedTemplateIds);
-                }}
-              />
+              {studioServiceType !== 'facility_access' && (
+                <ServiceTemplatesConfigPanel
+                  compact
+                  defaultTemplateId={defaultTemplateId}
+                  linkedTemplateIds={linkedTemplateIds}
+                  onChange={next => {
+                    setDefaultTemplateId(next.defaultTemplateId);
+                    setLinkedTemplateIds(next.linkedTemplateIds);
+                  }}
+                />
+              )}
             </div>
           ) : (
             <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
@@ -745,7 +816,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={loading || !name.trim() || !professionalId}
+              disabled={loading || !name.trim() || (!professionalId && (!showStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')))}
               className="inline-flex items-center gap-1.5 px-5 py-2 font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer"
             >
               {loading ? (

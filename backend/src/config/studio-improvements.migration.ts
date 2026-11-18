@@ -481,6 +481,7 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
     } catch (_) {}
 
     const instructorAreas = [
+      { id: 'pa-inst-musculacao', name: 'Musculação', slug: 'musculacao', type: 'AREA' },
       { id: 'pa-inst-pilates', name: 'Pilates', slug: 'pilates', type: 'AREA' },
       { id: 'pa-inst-danca', name: 'Dança', slug: 'danca', type: 'AREA' },
       { id: 'pa-inst-zumba', name: 'Zumba', slug: 'zumba', type: 'AREA' },
@@ -489,6 +490,7 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
       { id: 'pa-inst-ginastica', name: 'Ginástica', slug: 'ginastica', type: 'AREA' },
       { id: 'pa-inst-ritmos', name: 'Ritmos', slug: 'ritmos', type: 'AREA' },
       { id: 'pa-inst-funcional', name: 'Treinamento funcional', slug: 'treinamento-funcional', type: 'AREA' },
+      { id: 'pa-inst-artes-marciais', name: 'Artes marciais', slug: 'artes-marciais', type: 'AREA' },
       { id: 'pa-inst-outras', name: 'Outras modalidades', slug: 'outras-modalidades', type: 'AREA' }
     ];
 
@@ -878,5 +880,119 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
     `);
   } catch (e) {
     console.warn('[StudioMigration] Aviso ao criar tabela service_availability_windows:', e);
+  }
+
+  // 10. Evolução Academia & Studio: Acesso ao Estabelecimento, Matriz Comercial, Adicionais por Horário, Benefícios Combinados e Controle de Acesso
+  addColIfMissing('services', 'studio_service_type', "TEXT NOT NULL DEFAULT 'individual'");
+  addColIfMissing('services', 'requires_appointment', 'INTEGER NOT NULL DEFAULT 1');
+  addColIfMissing('services', 'requires_active_contract', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('services', 'allow_public_booking', 'INTEGER NOT NULL DEFAULT 1');
+  addColIfMissing('services', 'effective_start_date', 'TEXT');
+  addColIfMissing('services', 'effective_end_date', 'TEXT');
+  addColIfMissing('services', 'access_config_json', 'TEXT');
+  addColIfMissing('services', 'pricing_adjustments_json', 'TEXT');
+  addColIfMissing('services', 'commercial_price_options_json', 'TEXT');
+
+  addColIfMissing('service_package_items', 'item_type', "TEXT NOT NULL DEFAULT 'scheduled_service'");
+  addColIfMissing('service_package_items', 'access_mode', 'TEXT');
+  addColIfMissing('service_package_items', 'monthly_limit', 'INTEGER');
+  addColIfMissing('service_package_items', 'is_mandatory', 'INTEGER NOT NULL DEFAULT 1');
+  addColIfMissing('service_package_items', 'item_price', 'REAL');
+  addColIfMissing('service_package_items', 'access_rules_json', 'TEXT');
+
+  addColIfMissing('service_packages', 'discount_percent', 'REAL');
+  addColIfMissing('service_packages', 'contract_duration_code', 'TEXT');
+  addColIfMissing('service_packages', 'payment_periodicity', 'TEXT');
+  addColIfMissing('service_packages', 'fidelity_months', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('service_packages', 'grace_period_days', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('service_packages', 'auto_renew', 'INTEGER NOT NULL DEFAULT 0');
+
+  addColIfMissing('student_package_entitlements', 'entitlement_type', "TEXT NOT NULL DEFAULT 'scheduled_service'");
+  addColIfMissing('student_package_entitlements', 'access_mode_snapshot', 'TEXT');
+  addColIfMissing('student_package_entitlements', 'monthly_limit_snapshot', 'INTEGER');
+  addColIfMissing('student_package_entitlements', 'access_rules_snapshot_json', 'TEXT');
+  addColIfMissing('student_package_entitlements', 'entries_used', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('student_package_entitlements', 'delivered_at', 'TEXT');
+  addColIfMissing('student_package_entitlements', 'delivered_by', 'TEXT');
+
+  addColIfMissing('student_package_contracts', 'contract_duration_code', 'TEXT');
+  addColIfMissing('student_package_contracts', 'payment_periodicity_snapshot', 'TEXT');
+  addColIfMissing('student_package_contracts', 'total_contract_amount', 'REAL');
+  addColIfMissing('student_package_contracts', 'fidelity_months_snapshot', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('student_package_contracts', 'grace_period_days_snapshot', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('student_package_contracts', 'auto_renew_snapshot', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('student_package_contracts', 'frozen_from_date', 'TEXT');
+  addColIfMissing('student_package_contracts', 'frozen_until_date', 'TEXT');
+  addColIfMissing('student_package_contracts', 'freeze_reason', 'TEXT');
+  addColIfMissing('student_package_contracts', 'suspended_at', 'TEXT');
+  addColIfMissing('student_package_contracts', 'suspension_reason', 'TEXT');
+  addColIfMissing('student_package_contracts', 'commercial_snapshot_json', 'TEXT');
+
+  addColIfMissing('recurring_billing_plans', 'contract_kind', "TEXT NOT NULL DEFAULT 'scheduled_plan'");
+  addColIfMissing('recurring_billing_plans', 'contract_status', "TEXT NOT NULL DEFAULT 'active'");
+  addColIfMissing('recurring_billing_plans', 'payment_periodicity', "TEXT NOT NULL DEFAULT 'monthly'");
+  addColIfMissing('recurring_billing_plans', 'total_contract_amount', 'REAL');
+  addColIfMissing('recurring_billing_plans', 'installments_count', 'INTEGER NOT NULL DEFAULT 1');
+  addColIfMissing('recurring_billing_plans', 'fidelity_months', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('recurring_billing_plans', 'grace_period_days', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('recurring_billing_plans', 'auto_renew', 'INTEGER NOT NULL DEFAULT 0');
+  addColIfMissing('recurring_billing_plans', 'access_mode_snapshot', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'access_rules_snapshot_json', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'commercial_snapshot_json', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'frozen_from_date', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'frozen_until_date', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'freeze_reason', 'TEXT');
+  addColIfMissing('recurring_billing_plans', 'origin', "TEXT NOT NULL DEFAULT 'admin'");
+
+  try {
+    rawDb.exec(`
+      UPDATE services
+      SET studio_service_type = CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END
+      WHERE studio_service_type = 'individual' AND COALESCE(service_kind, 'individual') = 'group';
+
+      CREATE TABLE IF NOT EXISTS studio_access_logs (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        student_id TEXT NOT NULL,
+        service_id TEXT,
+        contract_type TEXT NOT NULL DEFAULT 'recurring_plan',
+        recurring_plan_id TEXT,
+        package_contract_id TEXT,
+        entitlement_id TEXT,
+        plan_name_snapshot TEXT,
+        access_status TEXT NOT NULL CHECK(access_status IN ('allowed', 'denied')),
+        denial_reason_code TEXT,
+        denial_reason_message TEXT,
+        is_exception INTEGER NOT NULL DEFAULT 0,
+        exception_reason TEXT,
+        authorized_by_user_id TEXT,
+        identification_method TEXT NOT NULL DEFAULT 'manual' CHECK(identification_method IN ('manual', 'qr_code', 'cpf', 'code')),
+        check_in_at TEXT NOT NULL,
+        check_out_at TEXT,
+        auto_closed INTEGER NOT NULL DEFAULT 0,
+        operator_user_id TEXT,
+        operator_name TEXT,
+        corrected_by_user_id TEXT,
+        corrected_at TEXT,
+        correction_reason TEXT,
+        notes TEXT,
+        idempotency_key TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (student_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_studio_access_logs_tenant_date
+        ON studio_access_logs(tenant_id, check_in_at, access_status);
+      CREATE INDEX IF NOT EXISTS idx_studio_access_logs_student
+        ON studio_access_logs(tenant_id, student_id, check_in_at);
+      CREATE INDEX IF NOT EXISTS idx_studio_access_logs_occupancy
+        ON studio_access_logs(tenant_id, access_status, check_out_at, check_in_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_studio_access_logs_idemp
+        ON studio_access_logs(tenant_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL;
+    `);
+  } catch (e) {
+    console.warn('[StudioMigration] Aviso ao criar estrutura de Controle de Acesso:', e);
   }
 }

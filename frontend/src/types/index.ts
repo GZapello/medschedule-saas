@@ -247,6 +247,15 @@ export interface Service {
   clinical_module?: string;
   service_kind?: 'individual' | 'group';
   service_domain?: 'clinical' | 'studio';
+  studio_service_type?: 'facility_access' | 'individual' | 'group' | 'non_scheduled';
+  requires_appointment?: number | boolean;
+  requires_active_contract?: number | boolean;
+  allow_public_booking?: number | boolean;
+  effective_start_date?: string | null;
+  effective_end_date?: string | null;
+  access_config?: import('../utils/studioAccessAndCommercial').StudioAccessConfig | null;
+  pricing_adjustments?: import('../utils/studioAccessAndCommercial').StudioPriceAdjustmentRule[];
+  commercial_price_options?: import('../utils/studioAccessAndCommercial').StudioCommercialPriceOption[];
   default_capacity?: number | null;
   allow_recurrence?: number;
   allowed_recurrence_frequencies?: (

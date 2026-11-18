@@ -39,6 +39,11 @@ import {
   InstructorParticipationService,
   normalizeUniqueIds
 } from '../services/instructor-participation.service';
+import {
+  evaluateStudioPriceAdjustments,
+  normalizeStudioPriceAdjustments,
+  normalizeStudioServiceType
+} from '../utils/studio-access-and-commercial';
 
 function validMeetingUrl(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true;
@@ -414,11 +419,37 @@ export class AppointmentController {
                default_capacity, name, service_domain, clinical_module,
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
                pricing_rule, is_price_customized, suggested_price, weekly_sessions_count,
-               default_template_id
+               default_template_id,
+               COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+               COALESCE(requires_appointment, 1) as requires_appointment,
+               pricing_adjustments_json
         FROM services WHERE id = ? AND tenant_id = ?
       `).get(serviceId, tenantId) as any;
       if (!serviceRow) { res.status(400).json({ error: 'Serviço não pertence à clínica.' }); return; }
-      const isGroupService = serviceRow.service_kind === 'group';
+      const resolvedStudioServiceType = normalizeStudioServiceType(serviceRow.studio_service_type, serviceRow.service_kind);
+      if (
+        Number(serviceRow.requires_appointment ?? 1) === 0 ||
+        resolvedStudioServiceType === 'facility_access' ||
+        resolvedStudioServiceType === 'non_scheduled'
+      ) {
+        res.status(400).json({
+          code: 'NON_SCHEDULABLE_SERVICE',
+          error: 'Este serviço não exige agendamento de horário (Acesso Livre/Limitado ou Entregável). Utilize Matrículas e Acessos ou Controle de Acesso.'
+        });
+        return;
+      }
+      const estProfileForCreate = getTenantEstablishmentProfile(tenantId);
+      const srvDomainForCreate = resolveServiceDomain({
+        establishmentProfile: estProfileForCreate,
+        serviceDomain: serviceRow.service_domain,
+        serviceKind: serviceRow.service_kind,
+        clinicalModule: serviceRow.clinical_module
+      });
+      const isSharedCapacityStudio =
+        supportsStudioFeatures(estProfileForCreate) &&
+        srvDomainForCreate === 'studio' &&
+        Number(serviceRow.default_capacity) >= 2;
+      const isGroupService = serviceRow.service_kind === 'group' || isSharedCapacityStudio;
       const defaultGroupCapacity = isGroupService ? Math.max(1, Number(serviceRow.default_capacity) || 1) : 1;
       // Only the existing authenticated scheduling flow can set a custom price.
       if (isPublic && req.body.appointmentPrice !== undefined) {
@@ -428,18 +459,30 @@ export class AppointmentController {
       const defaultReferenceServicePrice = Number(serviceRow.price) > 0
         ? Number(serviceRow.price)
         : (Number(serviceRow.periodic_price) > 0 ? Number(serviceRow.periodic_price) : Number(serviceRow.price || 0));
-      const appointmentPrice = suppliedPrice === undefined ? defaultReferenceServicePrice : suppliedPrice;
-      if (typeof appointmentPrice !== 'number' || !Number.isFinite(appointmentPrice) || appointmentPrice < 0 ||
-          !Number.isSafeInteger(Math.round(appointmentPrice * 100)) || Math.abs(appointmentPrice * 100 - Math.round(appointmentPrice * 100)) > 0.000001) {
-        res.status(400).json({ error: 'Valor da consulta inválido. Informe um número não negativo com até duas casas decimais.' }); return;
-      }
-      const agreedAmount = Math.round(appointmentPrice * 100) / 100;
-
       const normalizedStartTime = bookingTime(startTime);
       const normalizedEndTime = bookingTime(endTime);
       if (!normalizedStartTime || !normalizedEndTime || normalizedEndTime <= normalizedStartTime) {
         res.status(400).json({ code: 'INVALID_BOOKING_TIME', error: 'Informe uma data válida e um horário de término posterior ao início.' }); return;
       }
+      const pricingAdjustments = srvDomainForCreate === 'studio'
+        ? normalizeStudioPriceAdjustments(serviceRow.pricing_adjustments_json)
+        : [];
+      const priceAdjustmentEval = evaluateStudioPriceAdjustments({
+        basePrice: defaultReferenceServicePrice,
+        rules: pricingAdjustments,
+        weekday: getDayOfWeekFromYmd(normalizedStartTime.slice(0, 10)),
+        timeHhmm: normalizedStartTime.slice(11, 16),
+        modality: modality || serviceRow.modality || 'presential',
+        professionalId,
+        sessionType: isGroupService ? (defaultGroupCapacity === 2 ? 'duo' : 'group') : 'individual',
+        participantsCount: 1
+      });
+      const appointmentPrice = suppliedPrice === undefined ? priceAdjustmentEval.finalPrice : suppliedPrice;
+      if (typeof appointmentPrice !== 'number' || !Number.isFinite(appointmentPrice) || appointmentPrice < 0 ||
+          !Number.isSafeInteger(Math.round(appointmentPrice * 100)) || Math.abs(appointmentPrice * 100 - Math.round(appointmentPrice * 100)) > 0.000001) {
+        res.status(400).json({ error: 'Valor da consulta inválido. Informe um número não negativo com até duas casas decimais.' }); return;
+      }
+      const agreedAmount = Math.round(appointmentPrice * 100) / 100;
       if (!db.prepare('SELECT 1 FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId)) {
         res.status(400).json({ code: 'INVALID_PROFESSIONAL', error: 'Selecione um profissional ativo desta clínica.' }); return;
       }
@@ -2696,11 +2739,25 @@ export class AppointmentController {
                service_domain, clinical_module,
                billing_mode, periodic_price, billing_cycle_months, default_package_id, default_billing_due_day,
                pricing_rule, is_price_customized, suggested_price, weekly_sessions_count,
-               default_template_id
+               default_template_id,
+               COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+               COALESCE(requires_appointment, 1) as requires_appointment
         FROM services WHERE id = ? AND tenant_id = ? AND active = 1
       `).get(serviceId, tenantId) as any;
       if (!serviceRow) {
         res.status(404).json({ error: 'Serviço não encontrado ou inativo nesta clínica.' });
+        return;
+      }
+      const recStudioType = normalizeStudioServiceType(serviceRow.studio_service_type, serviceRow.service_kind);
+      if (
+        Number(serviceRow.requires_appointment ?? 1) === 0 ||
+        recStudioType === 'facility_access' ||
+        recStudioType === 'non_scheduled'
+      ) {
+        res.status(400).json({
+          code: 'NON_SCHEDULABLE_SERVICE',
+          error: 'Este serviço não exige agendamento de horário (Acesso Livre/Limitado ou Entregável). Utilize Matrículas e Acessos ou Controle de Acesso.'
+        });
         return;
       }
       const effectiveModality = rawModality !== undefined

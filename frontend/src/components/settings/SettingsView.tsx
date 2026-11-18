@@ -1974,8 +1974,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, init
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {[
                 { id: 'clinic', title: 'Clínica / Consultório', desc: 'Fluxo clínico tradicional com prontuários, exames e atendimentos.' },
-                { id: 'studio', title: 'Studio / Academia', desc: 'Prioriza turmas, aulas coletivas, frequência, modalidades e mensalidades.' },
-                { id: 'mixed', title: 'Estabelecimento Misto', desc: 'Combina atendimentos clínicos e aulas/turmas na mesma unidade.' }
+                { id: 'studio', title: 'Academia & Studio', desc: 'Academias, Studios de Pilates, Personal Trainers, dança, funcional, yoga, artes marciais, acesso livre/limitado, turmas e pacotes.' },
+                { id: 'mixed', title: 'Estabelecimento Misto', desc: 'Combina atendimentos clínicos e recursos de Academia & Studio na mesma unidade.' }
               ].map(opt => {
                 const selected = establishmentProfile === opt.id;
                 return (

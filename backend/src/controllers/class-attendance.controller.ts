@@ -1366,6 +1366,129 @@ export class ClassAttendanceController {
         weekday_label: WEEKDAY_NAMES[Number(r.weekday_index)] || `Dia ${r.weekday_index}`
       }));
 
+      // 8. Métricas de Matrículas & Contratos (Academia & Studio)
+      const todayYmd = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const in7DaysYmd = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+      const rbpStats = db.prepare(`
+        SELECT
+          SUM(CASE WHEN status = 'active' AND (end_date IS NULL OR end_date = '' OR end_date >= ?) THEN 1 ELSE 0 END) as active_count,
+          SUM(CASE WHEN substr(start_date, 1, 10) BETWEEN ? AND ? THEN 1 ELSE 0 END) as new_in_period,
+          SUM(CASE WHEN status = 'active' AND end_date IS NOT NULL AND end_date != '' AND end_date < ? THEN 1 ELSE 0 END) as expired_count,
+          SUM(CASE WHEN status = 'active' AND end_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as expiring_soon_count,
+          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count,
+          SUM(CASE WHEN status = 'paused' OR contract_status IN ('frozen', 'suspended') THEN 1 ELSE 0 END) as suspended_or_frozen_count
+        FROM recurring_billing_plans
+        WHERE tenant_id = ?
+      `).get(todayYmd, startDate, endDate, todayYmd, todayYmd, in7DaysYmd, tenantId) as any;
+
+      const spcStats = db.prepare(`
+        SELECT
+          SUM(CASE WHEN contract_status = 'active' AND (end_date IS NULL OR end_date = '' OR end_date >= ?) THEN 1 ELSE 0 END) as active_count,
+          SUM(CASE WHEN substr(start_date, 1, 10) BETWEEN ? AND ? THEN 1 ELSE 0 END) as new_in_period,
+          SUM(CASE WHEN contract_status = 'expired' OR (contract_status = 'active' AND end_date IS NOT NULL AND end_date != '' AND end_date < ?) THEN 1 ELSE 0 END) as expired_count,
+          SUM(CASE WHEN contract_status = 'active' AND end_date BETWEEN ? AND ? THEN 1 ELSE 0 END) as expiring_soon_count,
+          SUM(CASE WHEN contract_status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count,
+          SUM(CASE WHEN contract_status = 'suspended' THEN 1 ELSE 0 END) as suspended_or_frozen_count
+        FROM student_package_contracts
+        WHERE tenant_id = ?
+      `).get(todayYmd, startDate, endDate, todayYmd, todayYmd, in7DaysYmd, tenantId) as any;
+
+      const topPlansRows = db.prepare(`
+        SELECT title as plan_name, COALESCE(contract_kind, 'periodic_plan') as plan_kind, COUNT(*) as contracts_count
+        FROM recurring_billing_plans
+        WHERE tenant_id = ? AND status != 'cancelled'
+        GROUP BY title, contract_kind
+        UNION ALL
+        SELECT package_name_snapshot as plan_name, 'package' as plan_kind, COUNT(*) as contracts_count
+        FROM student_package_contracts
+        WHERE tenant_id = ? AND contract_status != 'cancelled'
+        GROUP BY package_name_snapshot
+        ORDER BY contracts_count DESC
+        LIMIT 10
+      `).all(tenantId, tenantId);
+
+      const enrollmentMetrics = {
+        activeEnrollments: Number(rbpStats?.active_count || 0) + Number(spcStats?.active_count || 0),
+        newEnrollmentsInPeriod: Number(rbpStats?.new_in_period || 0) + Number(spcStats?.new_in_period || 0),
+        expiredEnrollments: Number(rbpStats?.expired_count || 0) + Number(spcStats?.expired_count || 0),
+        expiringSoonEnrollments: Number(rbpStats?.expiring_soon_count || 0) + Number(spcStats?.expiring_soon_count || 0),
+        cancelledEnrollments: Number(rbpStats?.cancelled_count || 0) + Number(spcStats?.cancelled_count || 0),
+        frozenOrSuspendedEnrollments: Number(rbpStats?.suspended_or_frozen_count || 0) + Number(spcStats?.suspended_or_frozen_count || 0),
+        topPlans: topPlansRows
+      };
+
+      // 9. Métricas de Controle de Acesso (Academia Livre & Limitada)
+      const accessStats = db.prepare(`
+        SELECT
+          SUM(CASE WHEN substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) = ? AND access_status = 'allowed' THEN 1 ELSE 0 END) as today_access_count,
+          SUM(CASE WHEN substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) BETWEEN ? AND ? AND access_status = 'allowed' AND COALESCE(is_exception, 0) = 0 THEN 1 ELSE 0 END) as period_allowed_count,
+          SUM(CASE WHEN substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) BETWEEN ? AND ? AND access_status = 'denied' THEN 1 ELSE 0 END) as period_denied_count,
+          SUM(CASE WHEN substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) BETWEEN ? AND ? AND COALESCE(is_exception, 0) = 1 THEN 1 ELSE 0 END) as period_exception_count
+        FROM studio_access_logs
+        WHERE tenant_id = ?
+      `).get(todayYmd, startDate, endDate, startDate, endDate, startDate, endDate, tenantId) as any;
+
+      const threeHoursAgoIso = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 19);
+      const currentOccupancyRow = db.prepare(`
+        SELECT COUNT(DISTINCT student_id) as c
+        FROM studio_access_logs
+        WHERE tenant_id = ?
+          AND substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) = ?
+          AND access_status = 'allowed'
+          AND check_out_at IS NULL
+          AND REPLACE(check_in_at, ' ', 'T') >= ?
+      `).get(tenantId, todayYmd, threeHoursAgoIso) as { c: number } | undefined;
+
+      const accessPeakHours = db.prepare(`
+        SELECT substr(REPLACE(check_in_at, ' ', 'T'), 12, 2) || ':00' as hour_bucket, COUNT(*) as count
+        FROM studio_access_logs
+        WHERE tenant_id = ? AND substr(REPLACE(check_in_at, ' ', 'T'), 1, 10) BETWEEN ? AND ? AND access_status = 'allowed'
+        GROUP BY hour_bucket
+        ORDER BY count DESC
+        LIMIT 12
+      `).all(tenantId, startDate, endDate);
+
+      const accessMetrics = {
+        todayAccessCount: Number(accessStats?.today_access_count || 0),
+        periodAllowedAccesses: Number(accessStats?.period_allowed_count || 0),
+        periodDeniedAccesses: Number(accessStats?.period_denied_count || 0),
+        periodExceptionAccesses: Number(accessStats?.period_exception_count || 0),
+        currentOccupancy: Number(currentOccupancyRow?.c || 0),
+        accessPeakHours
+      };
+
+      // 10. Métricas Financeiras do Studio / Academia no período
+      const finRow = db.prepare(`
+        SELECT
+          COALESCE(SUM(CASE WHEN status = 'paid' AND substr(COALESCE(payment_date, due_date, created_at), 1, 10) BETWEEN ? AND ? THEN amount ELSE 0 END), 0) as received_in_period,
+          COALESCE(SUM(CASE WHEN status = 'pending' AND substr(COALESCE(due_date, created_at), 1, 10) BETWEEN ? AND ? THEN amount ELSE 0 END), 0) as pending_in_period,
+          COALESCE(SUM(CASE WHEN status = 'pending' AND due_date IS NOT NULL AND due_date != '' AND substr(due_date, 1, 10) < ? THEN amount ELSE 0 END), 0) as overdue_amount
+        FROM payments
+        WHERE tenant_id = ? AND status != 'cancelled'
+      `).get(startDate, endDate, startDate, endDate, todayYmd, tenantId) as any;
+
+      const revenueByModality = db.prepare(`
+        SELECT
+          COALESCE(NULLIF(TRIM(s.modality_category), ''), COALESCE(s.name, 'Planos e Pacotes')) as modality_name,
+          COALESCE(SUM(CASE WHEN p.status = 'paid' THEN p.amount ELSE 0 END), 0) as received_amount,
+          COALESCE(SUM(CASE WHEN p.status = 'pending' THEN p.amount ELSE 0 END), 0) as pending_amount
+        FROM payments p
+        LEFT JOIN services s ON s.id = p.service_id AND s.tenant_id = p.tenant_id
+        WHERE p.tenant_id = ?
+          AND p.status != 'cancelled'
+          AND substr(COALESCE(p.payment_date, p.due_date, p.created_at), 1, 10) BETWEEN ? AND ?
+        GROUP BY modality_name
+        ORDER BY received_amount DESC, pending_amount DESC
+      `).all(tenantId, startDate, endDate);
+
+      const studioFinancialMetrics = {
+        receivedInPeriod: Math.round(Number(finRow?.received_in_period || 0) * 100) / 100,
+        pendingInPeriod: Math.round(Number(finRow?.pending_in_period || 0) * 100) / 100,
+        overdueAmount: Math.round(Number(finRow?.overdue_amount || 0) * 100) / 100,
+        revenueByModality
+      };
+
       res.json({
         period: { startDate, endDate },
         kpis: {
@@ -1377,6 +1500,9 @@ export class ClassAttendanceController {
           attendanceRate,
           occupancyRate
         },
+        enrollmentMetrics,
+        accessMetrics,
+        studioFinancialMetrics,
         studentRanking,
         topModalities,
         byStudent,

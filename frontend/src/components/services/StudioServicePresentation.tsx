@@ -15,6 +15,8 @@ interface PresentationValues {
   name: string;
   professionalId: string;
   serviceKind: 'individual' | 'group';
+  studioServiceType?: 'facility_access' | 'individual' | 'group' | 'non_scheduled';
+  requiresAppointment?: boolean;
   price: string;
   billingMode: ServiceBillingMode;
   periodicPrice: string;
@@ -73,9 +75,17 @@ const frequencyTotal = (v: PresentationValues) => v.frequencyPricing?.enabled &&
 }).effectivePrice.toFixed(2) : null;
 
 function sectionSummary(section: Section, v: PresentationValues) {
+  const formatLabel =
+    v.studioServiceType === 'facility_access'
+      ? 'Acesso ao estabelecimento (sem agendamento)'
+      : v.studioServiceType === 'non_scheduled'
+        ? 'Serviço entregável (sem agendamento)'
+        : v.serviceKind === 'group'
+          ? 'Aula coletiva / Turma'
+          : 'Individual';
   switch (section) {
     case 'basics': return v.name || 'Dados do serviço';
-    case 'format': return v.serviceKind === 'group' ? 'Aula coletiva' : 'Individual';
+    case 'format': return formatLabel;
     case 'recurrence': return v.allowRecurrence
       ? [frequency(v), ...scheduleLines(v), PLAN_DURATION_LABELS[v.defaultPlanDuration]].join(' • ') : 'Sem recorrência';
     case 'billing': return `${SERVICE_BILLING_MODE_LABELS[v.billingMode]}${v.billingMode === 'package' ? '' : ` • ${money(isPeriodicBillingMode(v.billingMode) ? frequencyTotal(v) ?? v.periodicPrice : v.price)}${isPeriodicBillingMode(v.billingMode) ? ' por período' : ''}`}`;
@@ -125,7 +135,7 @@ export function StudioServicePresentation({ enabled, values, className, children
     else if (periodic && (!v.periodicPrice.trim() || Number(v.periodicPrice) < 0)) { section = 'billing'; }
     else if (periodic && v.defaultBillingDueDay.trim() !== '' &&
       (!Number.isInteger(Number(v.defaultBillingDueDay)) || Number(v.defaultBillingDueDay) < 1 || Number(v.defaultBillingDueDay) > 28)) { section = 'billing'; }
-    else if (!v.professionalId) { section = 'basics'; field = 'professional'; }
+    else if (!v.professionalId && v.requiresAppointment !== false && v.studioServiceType !== 'facility_access' && v.studioServiceType !== 'non_scheduled') { section = 'basics'; field = 'professional'; }
     else if (v.serviceKind === 'group' && v.hasPendingScheduleForm) { section = 'recurrence'; }
     if (!section) return;
     setOpen(previous => ({ ...previous, [section!]: true }));
@@ -166,8 +176,16 @@ export function StudioServiceIndicators() {
   const context = useContext(Context);
   if (!context) return null;
   const v = context.values;
+  const kindLabel =
+    v.studioServiceType === 'facility_access'
+      ? 'Acesso ao estabelecimento'
+      : v.studioServiceType === 'non_scheduled'
+        ? 'Serviço entregável'
+        : v.serviceKind === 'group'
+          ? 'Aula coletiva'
+          : 'Individual';
   return <div className="flex flex-wrap gap-1.5 px-5 pb-3 sm:px-6 text-[11px] shrink-0 border-b border-slate-100">
-    {[v.serviceKind === 'group' ? 'Aula coletiva' : 'Individual', frequency(v), SERVICE_BILLING_MODE_LABELS[v.billingMode], 'Studio'].map((label, index) =>
+    {[kindLabel, frequency(v), SERVICE_BILLING_MODE_LABELS[v.billingMode], 'Academia & Studio'].map((label, index) =>
       <span key={index} className={`px-2.5 py-1 rounded-lg border font-medium ${index === 3 ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-teal-50 border-teal-100 text-teal-800'}`}>{label}</span>)}
   </div>;
 }
