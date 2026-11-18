@@ -213,4 +213,16 @@ export type CatalogImportErrorCategory =
   | 'analysis_error'
   | 'communication_error'
   | 'validation_error'
+  | 'auth_error'
   | 'expired';
+
+export type CatalogImportStage =
+  | 'upload_validation'
+  | 'temp_storage'
+  | 'queue_enqueue'
+  | 'worker_load_temp'
+  | 'ai_provider'
+  | 'ai_response_parse'
+  | 'proposal_normalization'
+  | 'completed'
+  | 'cancelled';

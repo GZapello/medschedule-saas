@@ -18,6 +18,7 @@ import { ApiClient } from '../../api/client';
 import type {
   CatalogImportBatchStatus,
   CatalogImportErrorCategory,
+  CatalogImportStage,
   ImportDraft,
   ImportReceipt,
   ImportSource
@@ -34,6 +35,7 @@ type DraftListItem = {
   id: string;
   status?: CatalogImportBatchStatus;
   errorCategory?: CatalogImportErrorCategory | null;
+  errorStage?: CatalogImportStage | null;
   hasExtractedData?: boolean;
   requestId?: string | null;
   errorCode?: string | null;
@@ -41,6 +43,8 @@ type DraftListItem = {
   retryable?: boolean;
   retryAfterSeconds?: number | null;
   attempts?: number;
+  maxAttempts?: number;
+  diagnostic?: ImportDraft['diagnostic'];
   tempExpiresAt?: string | null;
   tempPurgedAt?: string | null;
   revision?: number;
@@ -48,6 +52,50 @@ type DraftListItem = {
   result?: ImportReceipt | null;
   updatedAt?: string;
 };
+
+const stageLabels: Record<CatalogImportStage, string> = {
+  upload_validation: 'Validação dos arquivos',
+  temp_storage: 'Armazenamento temporário',
+  queue_enqueue: 'Enfileiramento',
+  worker_load_temp: 'Leitura dos arquivos temporários',
+  ai_provider: 'Comunicação com a IA',
+  ai_response_parse: 'Interpretação da resposta',
+  proposal_normalization: 'Normalização do catálogo',
+  completed: 'Concluído',
+  cancelled: 'Cancelado'
+};
+
+function stageLabel(stage?: CatalogImportStage | null): string | null {
+  return stage ? stageLabels[stage] || stage : null;
+}
+
+function canRetryBatch(item: Pick<DraftListItem, 'status' | 'retryable' | 'attempts' | 'maxAttempts' | 'errorCode'>): boolean {
+  if (item.status !== 'failed' || !item.retryable) return false;
+  if (item.errorCode === 'MAX_RETRIES_EXCEEDED' || item.errorCode === 'AI_AUTH_ERROR' || item.errorCode === 'AI_NOT_CONFIGURED') {
+    return false;
+  }
+  const attempts = Number(item.attempts || 0);
+  const maxAttempts = Number(item.maxAttempts || 3);
+  return attempts < maxAttempts;
+}
+
+async function postJsonWithTimeout<T>(path: string, body: unknown, timeoutMs = 30_000): Promise<T> {
+  const controller = new AbortController();
+  const timerId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await ApiClient.post<T>(path, body, { signal: controller.signal });
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || controller.signal.aborted) {
+      throw Object.assign(
+        new Error('Tempo limite excedido no navegador ao enviar os arquivos para análise. Verifique a conexão e tente novamente.'),
+        { code: 'CLIENT_REQUEST_TIMEOUT', retryable: true }
+      );
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timerId);
+  }
+}
 
 type ApiErrorLike = Error & {
   status?: number;
@@ -117,13 +165,18 @@ function resolveErrorCategory(item: Pick<DraftListItem, 'errorCategory' | 'error
   if (item.errorCode === 'TEMP_FILES_EXPIRED' || item.errorCode === 'BACKEND_RESTARTED_TEMP_UNAVAILABLE') {
     return 'expired';
   }
+  if (item.errorCode === 'AI_AUTH_ERROR' || item.errorCode === 'AI_NOT_CONFIGURED') {
+    return 'auth_error';
+  }
   if (item.errorCode === 'AI_INVALID_OR_BLOCKED' || item.errorCode === 'AI_UNREADABLE_CONTENT') {
     return 'validation_error';
   }
   if (
     item.errorCode === 'AI_RATE_LIMITED'
     || item.errorCode === 'AI_PROVIDER_UNAVAILABLE'
-    || item.errorCode === 'AI_NOT_CONFIGURED'
+    || item.errorCode === 'AI_TIMEOUT'
+    || item.errorCode === 'CLIENT_REQUEST_TIMEOUT'
+    || item.errorCode === 'MAX_RETRIES_EXCEEDED'
     || item.errorCode === 'TEMP_STAGE_ERROR'
     || item.errorCode === 'ASYNC_JOB_ERROR'
     || item.errorCode === 'BACKEND_RESTARTED'
@@ -133,12 +186,18 @@ function resolveErrorCategory(item: Pick<DraftListItem, 'errorCategory' | 'error
   return 'analysis_error';
 }
 
-function failureHeading(item: Pick<DraftListItem, 'errorCategory' | 'errorCode'>): string {
+function failureHeading(item: Pick<DraftListItem, 'errorCategory' | 'errorCode' | 'status' | 'retryable' | 'attempts' | 'maxAttempts'>): string {
   const cat = resolveErrorCategory(item);
   if (cat === 'expired') return 'Arquivos temporários expirados';
-  if (cat === 'communication_error') return 'Falha de comunicação com o serviço';
+  if (cat === 'auth_error') return 'Falha de autenticação ou configuração do provedor de IA';
   if (cat === 'validation_error') return 'Falha de validação dos arquivos';
-  return 'Falha na análise do catálogo';
+  if (item.errorCode === 'MAX_RETRIES_EXCEEDED' || (!canRetryBatch(item) && Number(item.attempts || 0) >= Number(item.maxAttempts || 3))) {
+    return 'Falha definitiva (limite de tentativas atingido)';
+  }
+  if (cat === 'communication_error') {
+    return canRetryBatch(item) ? 'Falha temporária de comunicação com a IA' : 'Falha definitiva de comunicação';
+  }
+  return canRetryBatch(item) ? 'Falha temporária na análise do catálogo' : 'Falha definitiva na análise do catálogo';
 }
 
 function statusBadge(item: DraftListItem): { label: string; className: string } {
@@ -156,19 +215,19 @@ function statusBadge(item: DraftListItem): { label: string; className: string } 
     if (cat === 'expired') {
       return { label: 'Arquivos expirados', className: 'bg-rose-100 text-rose-800' };
     }
-    if (cat === 'communication_error') {
-      return {
-        label: item.retryable ? 'Falha de comunicação · retentativa' : 'Falha de comunicação',
-        className: 'bg-amber-100 text-amber-800'
-      };
+    if (cat === 'auth_error') {
+      return { label: 'Falha de autenticação · IA', className: 'bg-rose-100 text-rose-800' };
     }
     if (cat === 'validation_error') {
       return { label: 'Falha de validação', className: 'bg-amber-100 text-amber-800' };
     }
-    return {
-      label: item.retryable ? 'Falha de análise · retentativa' : 'Falha de análise',
-      className: 'bg-rose-100 text-rose-800'
-    };
+    if (canRetryBatch(item)) {
+      return {
+        label: cat === 'communication_error' ? 'Falha temporária · comunicação' : 'Falha temporária · análise',
+        className: 'bg-amber-100 text-amber-800'
+      };
+    }
+    return { label: 'Falha definitiva', className: 'bg-rose-100 text-rose-800' };
   }
   return { label: 'Pronto para revisão', className: 'bg-emerald-100 text-emerald-800' };
 }
@@ -341,7 +400,7 @@ export function StudioCatalogImportView() {
     setErrorDetails(null);
     setMessage('');
     try {
-      const res = await ApiClient.post<ImportDraft | DraftListItem>(endpoint + '/' + id + '/retry', {});
+      const res = await postJsonWithTimeout<ImportDraft | DraftListItem>(endpoint + '/' + id + '/retry', {}, 30_000);
       if (hasProposal(res)) {
         setActiveJob(null);
         setDraft(res);
@@ -478,7 +537,7 @@ export function StudioCatalogImportView() {
         isJobRunning
           ? 'border-indigo-200 bg-indigo-50/70 text-indigo-950'
           : activeJob.status === 'failed'
-            ? (resolveErrorCategory(activeJob) === 'expired' || resolveErrorCategory(activeJob) === 'analysis_error'
+            ? (!canRetryBatch(activeJob) || resolveErrorCategory(activeJob) === 'expired' || resolveErrorCategory(activeJob) === 'auth_error'
               ? 'border-rose-200 bg-rose-50/70 text-rose-950'
               : 'border-amber-200 bg-amber-50/80 text-amber-950')
             : 'border-slate-200 bg-slate-50 text-slate-800'
@@ -488,7 +547,7 @@ export function StudioCatalogImportView() {
             {isJobRunning
               ? <Loader2 aria-hidden="true" className="h-5 w-5 shrink-0 animate-spin text-indigo-600 mt-0.5" />
               : activeJob.status === 'failed'
-                ? <AlertCircle aria-hidden="true" className={`h-5 w-5 shrink-0 mt-0.5 ${resolveErrorCategory(activeJob) === 'expired' ? 'text-rose-600' : 'text-amber-600'}`} />
+                ? <AlertCircle aria-hidden="true" className={`h-5 w-5 shrink-0 mt-0.5 ${!canRetryBatch(activeJob) || resolveErrorCategory(activeJob) === 'expired' || resolveErrorCategory(activeJob) === 'auth_error' ? 'text-rose-600' : 'text-amber-600'}`} />
                 : <XCircle aria-hidden="true" className="h-5 w-5 shrink-0 text-slate-500 mt-0.5" />}
             <div className="min-w-0 space-y-1">
               <p className="text-sm font-bold">
@@ -500,7 +559,10 @@ export function StudioCatalogImportView() {
               </p>
               <p className="text-xs opacity-90 truncate">
                 Arquivos: {activeJob.sources.map(s => s.fileName).join(', ')}
-                {activeJob.attempts ? ` · Tentativa ${activeJob.attempts}` : ''}
+                {activeJob.attempts ? ` · Tentativa ${activeJob.attempts} de ${activeJob.maxAttempts || 3}` : ''}
+                {activeJob.errorStage && activeJob.status === 'failed' && stageLabel(activeJob.errorStage)
+                  ? ` · Etapa: ${stageLabel(activeJob.errorStage)}`
+                  : ''}
                 {activeJob.requestId ? ` · Protocolo ${activeJob.requestId}` : ''}
               </p>
               {isJobRunning && (
@@ -528,12 +590,12 @@ export function StudioCatalogImportView() {
                 <XCircle aria-hidden="true" className="h-4 w-4" />Cancelar análise
               </button>
             )}
-            {activeJob.status === 'failed' && activeJob.retryable && (
+            {activeJob.status === 'failed' && canRetryBatch(activeJob) && (
               <button type="button" className={primary} disabled={!!activity} onClick={() => void retryBatch(activeJob.id)}>
                 <RefreshCw aria-hidden="true" className="h-4 w-4" />Tentar novamente
               </button>
             )}
-            {!isJobRunning && !activeJob.retryable && (
+            {!isJobRunning && !canRetryBatch(activeJob) && (
               <button type="button" className={primary} disabled={!!activity} onClick={() => void reuploadForBatch(activeJob)}>
                 <Upload aria-hidden="true" className="h-4 w-4" />Reenviar arquivos
               </button>
@@ -595,7 +657,7 @@ export function StudioCatalogImportView() {
         <button type="button" className={primary} disabled={!!activity || isJobRunning || files.length === 0} onClick={() => void run('reading', async () => {
           const encoded = await Promise.all(files.map(encode));
           setActivity('analyzing');
-          const analyzed = await ApiClient.post<ImportDraft | DraftListItem>(endpoint + '/analyze', { files: encoded, async: true });
+          const analyzed = await postJsonWithTimeout<ImportDraft | DraftListItem>(endpoint + '/analyze', { files: encoded, async: true }, 30_000);
           setFiles([]);
           return analyzed;
         })}><Sparkles aria-hidden="true" className="h-4 w-4" />Analisar catálogo com IA</button>
@@ -627,13 +689,13 @@ export function StudioCatalogImportView() {
               {item.tempPurgedAt && item.status === 'ready' && (
                 <span className="text-[11px] text-emerald-700 font-medium hidden sm:inline">Arquivos originais removidos</span>
               )}
-              {item.status === 'failed' && item.retryable && (
+              {item.status === 'failed' && canRetryBatch(item) && (
                 <button type="button" disabled={!!activity || isJobRunning} onClick={() => void retryBatch(item.id)}
                   className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 cursor-pointer disabled:opacity-50">
                   <RefreshCw className="h-3.5 w-3.5" />Retentar
                 </button>
               )}
-              {(item.status === 'failed' || item.status === 'cancelled') && !item.retryable && (
+              {(item.status === 'failed' || item.status === 'cancelled') && !canRetryBatch(item) && (
                 <button type="button" disabled={!!activity} onClick={() => void reuploadForBatch(item)}
                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer disabled:opacity-50">
                   <Upload className="h-3.5 w-3.5" />Reenviar arquivos

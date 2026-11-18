@@ -21,6 +21,8 @@ export function migrateStudioCatalogImports(rawDb: DatabaseSync): void {
       status TEXT NOT NULL DEFAULT 'ready',
       error_code TEXT,
       error_message TEXT,
+      error_stage TEXT,
+      diagnostic_json TEXT,
       request_id TEXT,
       attempts INTEGER NOT NULL DEFAULT 0,
       retryable INTEGER NOT NULL DEFAULT 0,
@@ -37,6 +39,8 @@ export function migrateStudioCatalogImports(rawDb: DatabaseSync): void {
   addColIfMissing(rawDb, 'studio_catalog_imports', 'status', `TEXT NOT NULL DEFAULT 'ready'`);
   addColIfMissing(rawDb, 'studio_catalog_imports', 'error_code', 'TEXT');
   addColIfMissing(rawDb, 'studio_catalog_imports', 'error_message', 'TEXT');
+  addColIfMissing(rawDb, 'studio_catalog_imports', 'error_stage', 'TEXT');
+  addColIfMissing(rawDb, 'studio_catalog_imports', 'diagnostic_json', 'TEXT');
   addColIfMissing(rawDb, 'studio_catalog_imports', 'request_id', 'TEXT');
   addColIfMissing(rawDb, 'studio_catalog_imports', 'attempts', 'INTEGER NOT NULL DEFAULT 0');
   addColIfMissing(rawDb, 'studio_catalog_imports', 'retryable', 'INTEGER NOT NULL DEFAULT 0');

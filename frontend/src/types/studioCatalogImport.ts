@@ -216,12 +216,24 @@ export interface ImportReceipt {
 
 export type CatalogImportBatchStatus = 'queued' | 'processing' | 'failed' | 'cancelled' | 'ready' | 'completed';
 
-export type CatalogImportErrorCategory = 'analysis_error' | 'communication_error' | 'validation_error' | 'expired';
+export type CatalogImportErrorCategory = 'analysis_error' | 'communication_error' | 'validation_error' | 'auth_error' | 'expired';
+
+export type CatalogImportStage =
+  | 'upload_validation'
+  | 'temp_storage'
+  | 'queue_enqueue'
+  | 'worker_load_temp'
+  | 'ai_provider'
+  | 'ai_response_parse'
+  | 'proposal_normalization'
+  | 'completed'
+  | 'cancelled';
 
 export interface ImportDraft {
   id: string;
   status?: CatalogImportBatchStatus;
   errorCategory?: CatalogImportErrorCategory | null;
+  errorStage?: CatalogImportStage | null;
   hasExtractedData?: boolean;
   requestId?: string | null;
   errorCode?: string | null;
@@ -229,6 +241,13 @@ export interface ImportDraft {
   retryable?: boolean;
   retryAfterSeconds?: number | null;
   attempts?: number;
+  maxAttempts?: number;
+  diagnostic?: {
+    storageProvider?: string | null;
+    modelUsed?: string | null;
+    stageTimingsMs?: Record<string, number>;
+    attemptsCount?: number;
+  } | null;
   tempExpiresAt?: string | null;
   tempPurgedAt?: string | null;
   revision: number;

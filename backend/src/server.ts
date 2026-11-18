@@ -102,8 +102,11 @@ BillingWebhookService.start();
 // Inicia o motor de segundo plano para lembretes automáticos (Zemda Notifications API)
 import { NotificationService } from './services/notification.service';
 import { StudioCatalogTempStorageService } from './services/studio-catalog-temp-storage.service';
+import { StudioCatalogImportController } from './controllers/studio-catalog-import.controller';
 NotificationService.startBackgroundWorker(30000);
-void StudioCatalogTempStorageService.recoverInterruptedJobsOnStartup().catch((err) => {
+void StudioCatalogTempStorageService.recoverInterruptedJobsOnStartup((job) => {
+  StudioCatalogImportController.resumeBackgroundJob(job);
+}).catch((err) => {
   console.error('[StudioCatalogTempStorage] Erro na recuperação inicial:', err?.message || err);
 });
 StudioCatalogTempStorageService.startCleanupWorker(15 * 60_000);

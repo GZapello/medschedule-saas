@@ -24,7 +24,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { db } = require('./dist/config/database');
 const apiRouter = require('./dist/routes').default;
 const { generateToken } = require('./dist/utils/jwt');
-const { GeminiService } = require('./dist/services/gemini.service');
+const { GeminiService, effectiveMaxOutputTokens } = require('./dist/services/gemini.service');
+const { StudioCatalogImportController } = require('./dist/controllers/studio-catalog-import.controller');
 const { r2StorageService, resolveR2Endpoint } = require('./dist/services/r2-storage.service');
 const {
   StudioCatalogTempStorageService,
@@ -265,12 +266,16 @@ function seedTenantAndAdmin(idPrefix) {
     // TEST 2: GeminiService cascade real, cap de maxOutputTokens, classificação 429/503 e SEM HTTP 502
     // ------------------------------------------------------------------------
     const seenModels = [];
-    const seenMaxTokens = [];
+    const seenConfigs = [];
     GoogleGenerativeAI.prototype.getGenerativeModel = function ({ model }) {
       seenModels.push(model);
       return {
         generateContent: async (payload) => {
-          seenMaxTokens.push({ model, max: payload?.generationConfig?.maxOutputTokens });
+          seenConfigs.push({
+            model,
+            max: payload?.generationConfig?.maxOutputTokens,
+            thinkingBudget: payload?.generationConfig?.thinkingConfig?.thinkingBudget
+          });
           const err = new Error('[429 Too Many Requests] RESOURCE_EXHAUSTED quota exceeded');
           err.status = 429;
           throw err;
@@ -299,9 +304,12 @@ function seedTenantAndAdmin(idPrefix) {
     assert.equal(failSyncRes.json.code, 'AI_RATE_LIMITED');
     assert.equal(failSyncRes.json.retryable, true);
     assert.ok(!seenModels.includes('gemini-1.5-flash'), 'Deprecated gemini-1.5-flash must not be queried');
-    const token20 = seenMaxTokens.find((x) => x.model === 'gemini-2.0-flash');
-    assert.ok(token20 && token20.max <= 8192, `gemini-2.0-flash maxOutputTokens must be capped <= 8192, got ${token20?.max}`);
-    console.log('[PASS] 2. Real GeminiService cascade skips deprecated 1.5, caps 2.0 tokens, returns 503 JSON (never 502) + X-Request-ID');
+    assert.ok(!seenModels.includes('gemini-2.0-flash'), 'Retired gemini-2.0-flash must not be queried');
+    assert.ok(!seenModels.includes('gemini-2.5-flash'), 'Retired gemini-2.5-flash must not be queried');
+    assert.ok(seenModels.includes('gemini-3.1-flash-lite'), 'Active gemini-3.1-flash-lite must be queried');
+    assert.ok(seenConfigs.some((c) => c.model === 'gemini-3.1-flash-lite' && c.thinkingBudget === 0), 'Must set thinkingBudget: 0 on fast models');
+    assert.ok(effectiveMaxOutputTokens('gemini-2.0-flash', 16384) <= 8192, 'effectiveMaxOutputTokens helper still caps <= 8192');
+    console.log('[PASS] 2. Real GeminiService cascade uses active Gemini 3.x models, thinkingBudget=0, returns 503 JSON (never 502) + X-Request-ID');
 
     // Restaurar prototype após testar SDK real
     GoogleGenerativeAI.prototype.getGenerativeModel = origGetModel;
@@ -794,10 +802,12 @@ function seedTenantAndAdmin(idPrefix) {
     assert.equal(invalidJsonDone.json.errorCode, 'AI_INVALID_JSON');
     assert.equal(invalidJsonDone.json.errorCategory, 'analysis_error');
 
-    // Timeout real -> errorCategory = communication_error, retryable = true
+    // Timeout real (incluindo string abort do SDK Google) -> AI_TIMEOUT + communication_error + retryable = true
     GoogleGenerativeAI.prototype.getGenerativeModel = function () {
       return {
-        generateContent: async () => { throw new Error('Timeout de 40000ms excedido'); }
+        generateContent: async () => {
+          throw new Error('Request aborted when fetching https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent: This operation was aborted');
+        }
       };
     };
     const imgTimeout = await makeSyntheticPngBase64(223);
@@ -808,8 +818,10 @@ function seedTenantAndAdmin(idPrefix) {
     assert.equal(timeoutRes.status, 202);
     const timeoutDone = await pollUntilTerminal(baseUrl, timeoutRes.json.id, tenantB.token);
     assert.equal(timeoutDone.json.status, 'failed');
-    assert.equal(timeoutDone.json.errorCode, 'AI_PROVIDER_UNAVAILABLE');
+    assert.equal(timeoutDone.json.errorCode, 'AI_TIMEOUT');
     assert.equal(timeoutDone.json.errorCategory, 'communication_error');
+    assert.equal(timeoutDone.json.errorStage, 'ai_provider');
+    assert.equal(timeoutDone.json.maxAttempts, 3);
     assert.equal(timeoutDone.json.retryable, true);
     GoogleGenerativeAI.prototype.getGenerativeModel = origGetModel;
 
@@ -840,9 +852,185 @@ function seedTenantAndAdmin(idPrefix) {
     assert.equal(reuploadDone.json.hasExtractedData, true);
     console.log('[PASS] 9. EPROTO SSL fallback, 321KB JPG plano de academia, partial/wrapped JSON, PNG-as-JPG, timeout, error categories & clean re-upload');
 
-    // Purga lotes ainda marcados retryable no teste (timeout/invalid_json) para validar limpeza final absoluta
+    // Purga lotes ainda marcados retryable no teste (timeout/invalid_json) antes dos próximos cenários
     await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantB.tenantId, invalidJsonRes.json.id, 'test_cleanup');
     await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantB.tenantId, timeoutRes.json.id, 'test_cleanup');
+
+    // ------------------------------------------------------------------------
+    // TEST 11: Fallback de thinkingConfig quando modelo rejeita (400 Bad Request -> tenta sem thinkingConfig e conclui)
+    // ------------------------------------------------------------------------
+    let callAttemptsForThinking = 0;
+    GeminiService.extractStudioCatalog = origExtractCatalog;
+    GoogleGenerativeAI.prototype.getGenerativeModel = function () {
+      return {
+        generateContent: async (payload) => {
+          callAttemptsForThinking += 1;
+          if (payload?.generationConfig?.thinkingConfig !== undefined) {
+            const badReq = new Error('[400 Bad Request] Thinking level is not supported for this model.');
+            badReq.status = 400;
+            throw badReq;
+          }
+          return {
+            response: {
+              text: () => JSON.stringify(createSampleProposal('Spinning Thinking Fallback', 180))
+            }
+          };
+        }
+      };
+    };
+    const imgThinking = await makeSyntheticPngBase64(241);
+    const thinkingRes = await requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantA.token, {
+      async: true,
+      files: [{ fileName: 'thinking-fallback.png', base64: imgThinking.base64 }]
+    });
+    assert.equal(thinkingRes.status, 202);
+    const thinkingDone = await pollUntilTerminal(baseUrl, thinkingRes.json.id, tenantA.token);
+    assert.equal(thinkingDone.json.status, 'ready');
+    assert.equal(thinkingDone.json.proposal.services[0].name, 'Spinning Thinking Fallback');
+    assert.ok(callAttemptsForThinking >= 2, 'Must retry without thinkingConfig on 400 Bad Request');
+    assert.ok(thinkingDone.json.diagnostic?.stageTimingsMs?.aiExtractMs >= 0, 'Diagnostic stageTimingsMs must be populated');
+    GoogleGenerativeAI.prototype.getGenerativeModel = origGetModel;
+    console.log('[PASS] 11. Automatic thinkingConfig 400 fallback + sanitized diagnostic timings');
+
+    // ------------------------------------------------------------------------
+    // TEST 12: Auth error (401 API key inválida -> AI_AUTH_ERROR, auth_error, retryable=false, purga imediata)
+    // ------------------------------------------------------------------------
+    GeminiService.extractStudioCatalog = origExtractCatalog;
+    GoogleGenerativeAI.prototype.getGenerativeModel = function () {
+      return {
+        generateContent: async () => {
+          const authErr = new Error('[401 Unauthorized] API key not valid. Please pass a valid API key.');
+          authErr.status = 401;
+          throw authErr;
+        }
+      };
+    };
+    const imgAuth = await makeSyntheticPngBase64(243);
+    const authFailRes = await requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantA.token, {
+      async: true,
+      files: [{ fileName: 'auth-fail.png', base64: imgAuth.base64 }]
+    });
+    assert.equal(authFailRes.status, 202);
+    const authFailDone = await pollUntilTerminal(baseUrl, authFailRes.json.id, tenantA.token);
+    assert.equal(authFailDone.json.status, 'failed');
+    assert.equal(authFailDone.json.errorCode, 'AI_AUTH_ERROR');
+    assert.equal(authFailDone.json.errorCategory, 'auth_error');
+    assert.equal(authFailDone.json.errorStage, 'ai_provider');
+    assert.equal(authFailDone.json.retryable, false);
+    const authTempRemaining = db.prepare(`
+      SELECT COUNT(*) AS cnt FROM studio_catalog_import_temp_files WHERE batch_id = ? AND temp_state != 'deleted'
+    `).get(authFailRes.json.id).cnt;
+    assert.equal(authTempRemaining, 0, 'Non-retryable auth_error must purge temp files immediately');
+    GoogleGenerativeAI.prototype.getGenerativeModel = origGetModel;
+    console.log('[PASS] 12. Invalid credential returns non-retryable AI_AUTH_ERROR (auth_error) and purges temp immediately');
+
+    // ------------------------------------------------------------------------
+    // TEST 13: Limite máximo de 3 tentativas por lote (MAX_RETRIES_EXCEEDED -> retryable=false + HTTP 409)
+    // ------------------------------------------------------------------------
+    GeminiService.extractStudioCatalog = origExtractCatalog;
+    GoogleGenerativeAI.prototype.getGenerativeModel = function () {
+      return {
+        generateContent: async () => {
+          const err = new Error('Timeout de 22000ms excedido');
+          throw err;
+        }
+      };
+    };
+    const imgCap = await makeSyntheticPngBase64(251);
+    const capRes1 = await requestJson(baseUrl, 'POST', '/api/v1/studio/catalog-imports/analyze', tenantA.token, {
+      async: true,
+      files: [{ fileName: 'retry-cap.png', base64: imgCap.base64 }]
+    });
+    assert.equal(capRes1.status, 202);
+    const capBatchId = capRes1.json.id;
+
+    const capFail1 = await pollUntilTerminal(baseUrl, capBatchId, tenantA.token);
+    assert.equal(capFail1.json.attempts, 1);
+    assert.equal(capFail1.json.retryable, true);
+
+    const capRes2 = await requestJson(baseUrl, 'POST', `/api/v1/studio/catalog-imports/${capBatchId}/retry`, tenantA.token, {});
+    assert.equal(capRes2.status, 202);
+    const capFail2 = await pollUntilTerminal(baseUrl, capBatchId, tenantA.token);
+    assert.equal(capFail2.json.attempts, 2);
+    assert.equal(capFail2.json.retryable, true);
+
+    const capRes3 = await requestJson(baseUrl, 'POST', `/api/v1/studio/catalog-imports/${capBatchId}/retry`, tenantA.token, {});
+    assert.equal(capRes3.status, 202);
+    const capFail3 = await pollUntilTerminal(baseUrl, capBatchId, tenantA.token);
+    assert.equal(capFail3.json.attempts, 3);
+    assert.equal(capFail3.json.errorCode, 'MAX_RETRIES_EXCEEDED');
+    assert.equal(capFail3.json.retryable, false);
+
+    const capRes4 = await requestJson(baseUrl, 'POST', `/api/v1/studio/catalog-imports/${capBatchId}/retry`, tenantA.token, {});
+    assert.equal(capRes4.status, 409);
+    assert.equal(capRes4.json.code, 'MAX_RETRIES_EXCEEDED');
+    const capTempRemaining = db.prepare(`
+      SELECT COUNT(*) AS cnt FROM studio_catalog_import_temp_files WHERE batch_id = ? AND temp_state != 'deleted'
+    `).get(capBatchId).cnt;
+    assert.equal(capTempRemaining, 0, 'Exhausting max retries must purge temp files');
+    GoogleGenerativeAI.prototype.getGenerativeModel = origGetModel;
+    console.log('[PASS] 13. Enforces maxAttempts=3 cap, purges temp files, rejects 4th retry with 409 MAX_RETRIES_EXCEEDED');
+
+    // ------------------------------------------------------------------------
+    // TEST 14: Recuperação pós-reinício: (a) auto-resume quando temp R2 existe; (b) falha explícita quando local_tmp sumiu
+    // ------------------------------------------------------------------------
+    r2ConfiguredFlag = true;
+    process.env.R2_MOCK_STORAGE = 'false';
+    const r2ResumeBatchId = `res-r2-${randomUUID().slice(0, 8)}`;
+    const wipedLocalBatchId = `wiped-loc-${randomUUID().slice(0, 8)}`;
+
+    db.prepare(`
+      INSERT INTO studio_catalog_imports (id, tenant_id, actor_id, fingerprint, sources_json, proposal_json, status, attempts, retryable)
+      VALUES (?, ?, ?, ?, '[{"id":1,"fileName":"resume-r2.png","copies":1}]', '{"services":[],"packages":[]}', 'processing', 1, 0)
+    `).run(r2ResumeBatchId, tenantA.tenantId, tenantA.userId, `fp-${r2ResumeBatchId}`);
+
+    await StudioCatalogTempStorageService.stageBatchTempFiles({
+      tenantId: tenantA.tenantId,
+      batchId: r2ResumeBatchId,
+      inputs: [{ fileName: 'resume-r2.png', mimeType: 'image/png', base64: img1.base64, fingerprint: 'f-resume-r2' }],
+      expiresAtIso: '2099-01-01 00:00:00'
+    });
+
+    r2ConfiguredFlag = false;
+    process.env.R2_MOCK_STORAGE = 'true';
+    db.prepare(`
+      INSERT INTO studio_catalog_imports (id, tenant_id, actor_id, fingerprint, sources_json, proposal_json, status, attempts, retryable)
+      VALUES (?, ?, ?, ?, '[{"id":1,"fileName":"wiped.png","copies":1}]', '{"services":[],"packages":[]}', 'processing', 1, 0)
+    `).run(wipedLocalBatchId, tenantB.tenantId, tenantB.userId, `fp-${wipedLocalBatchId}`);
+    await StudioCatalogTempStorageService.stageBatchTempFiles({
+      tenantId: tenantB.tenantId,
+      batchId: wipedLocalBatchId,
+      inputs: [{ fileName: 'wiped.png', mimeType: 'image/png', base64: img2.base64, fingerprint: 'f-wiped' }],
+      expiresAtIso: '2099-01-01 00:00:00'
+    });
+    // Simula perda do /tmp efêmero após reinício de container removendo diretório físico local_tmp
+    fs.rmSync(path.join(localTmpDir, tenantB.tenantId, wipedLocalBatchId), { recursive: true, force: true });
+
+    r2ConfiguredFlag = true;
+    process.env.R2_MOCK_STORAGE = 'false';
+    GeminiService.extractStudioCatalog = async () => createSampleProposal('Auto Resumed After Restart', 350);
+
+    const startupRec = await StudioCatalogTempStorageService.recoverInterruptedJobsOnStartup((job) => {
+      StudioCatalogImportController.resumeBackgroundJob(job);
+    });
+    assert.ok(startupRec.resumedJobs >= 1, 'Must auto-resume interrupted R2 batch on startup');
+    assert.ok(startupRec.missingTempCleaned >= 1, 'Must mark missing local_tmp batch as unavailable after restart');
+
+    const resumedPoll = await pollUntilTerminal(baseUrl, r2ResumeBatchId, tenantA.token);
+    assert.equal(resumedPoll.json.status, 'ready');
+    assert.equal(resumedPoll.json.proposal.services[0].name, 'Auto Resumed After Restart');
+
+    const wipedCheck = await requestJson(baseUrl, 'GET', `/api/v1/studio/catalog-imports/${wipedLocalBatchId}`, tenantB.token);
+    assert.equal(wipedCheck.status, 200);
+    assert.equal(wipedCheck.json.status, 'failed');
+    assert.equal(wipedCheck.json.errorCode, 'BACKEND_RESTARTED_TEMP_UNAVAILABLE');
+    assert.equal(wipedCheck.json.errorCategory, 'expired');
+    assert.equal(wipedCheck.json.errorStage, 'worker_load_temp');
+    assert.equal(wipedCheck.json.retryable, false);
+
+    r2ConfiguredFlag = false;
+    process.env.R2_MOCK_STORAGE = 'true';
+    console.log('[PASS] 14. Startup recovery auto-resumes R2 batch and marks wiped local_tmp cleanly without false retryable flag');
 
     // ------------------------------------------------------------------------
     // TEST 10: Nenhuma sobra ativa de arquivo temporário para nenhum lote concluído/pronto

@@ -15,17 +15,24 @@ dotenv.config();
 
 const CANDIDATE_MODELS = [...new Set([
   ...(process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL.trim()] : []),
-  'gemini-2.5-flash',
-  'gemini-flash-latest',
-  'gemini-2.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-3-flash-preview',
+  'gemini-3.5-flash',
+  'gemini-3.6-flash',
   'gemini-flash-lite-latest',
-  'gemini-2.0-flash'
+  'gemini-flash-latest',
+  'gemini-3.8-flash'
 ].filter(Boolean))];
+
+const deadModelsUntil = new Map<string, number>();
+const DEAD_MODEL_TTL_MS = 30 * 60_000;
 
 export type GeminiErrorCategory =
   | 'rate_limit'
   | 'unavailable'
   | 'model_not_found'
+  | 'auth_error'
   | 'invalid_request'
   | 'safety_blocked'
   | 'timeout'
@@ -52,13 +59,13 @@ export interface GeminiCatalogDiagnostic {
   attempts: GeminiAttemptTrace[];
 }
 
-function classifyGeminiError(err: any): {
+function classifyGeminiError(err: any, callerSignal?: AbortSignal): {
   category: GeminiErrorCategory;
   httpStatus?: number;
   retryable: boolean;
   retryAfterSeconds?: number;
 } {
-  if (err?.name === 'AbortError' || String(err?.message || '').includes('ABORTED')) {
+  if (callerSignal?.aborted || String(err?.message || '').includes('ABORTED')) {
     return { category: 'aborted', retryable: true };
   }
   const msg = String(err?.message || err || '');
@@ -66,16 +73,50 @@ function classifyGeminiError(err: any): {
   const statusMatch = msg.match(/\b(400|401|403|404|408|409|413|429|500|502|503|504)\b/);
   const httpStatus = Number(err?.status || err?.response?.status || (statusMatch ? Number(statusMatch[1]) : 0)) || undefined;
 
-  if (lower.includes('timeout') || lower.includes('excedido') || httpStatus === 408 || httpStatus === 504) {
-    return { category: 'timeout', httpStatus: httpStatus || 504, retryable: true, retryAfterSeconds: 15 };
+  if (
+    lower.includes('timeout')
+    || lower.includes('excedido')
+    || lower.includes('this operation was aborted')
+    || lower.includes('request aborted when fetching')
+    || err?.name === 'AbortError'
+    || httpStatus === 408
+    || httpStatus === 504
+  ) {
+    return { category: 'timeout', httpStatus: httpStatus || 504, retryable: true, retryAfterSeconds: 12 };
+  }
+  if (
+    httpStatus === 401
+    || httpStatus === 403
+    || lower.includes('api key not valid')
+    || lower.includes('api_key_invalid')
+    || lower.includes('permission denied')
+    || lower.includes('unauthorized')
+  ) {
+    return { category: 'auth_error', httpStatus: httpStatus || 401, retryable: false };
   }
   if (httpStatus === 429 || lower.includes('resource_exhausted') || lower.includes('quota') || lower.includes('rate limit')) {
     return { category: 'rate_limit', httpStatus: 429, retryable: true, retryAfterSeconds: 20 };
   }
-  if (httpStatus === 503 || httpStatus === 502 || httpStatus === 500 || lower.includes('unavailable') || lower.includes('overloaded')) {
+  if (
+    httpStatus === 503
+    || httpStatus === 502
+    || httpStatus === 500
+    || lower.includes('unavailable')
+    || lower.includes('high demand')
+    || lower.includes('overloaded')
+    || lower.includes('fetch failed')
+    || lower.includes('econnreset')
+    || lower.includes('etimedout')
+    || lower.includes('network')
+  ) {
     return { category: 'unavailable', httpStatus: httpStatus || 503, retryable: true, retryAfterSeconds: 15 };
   }
-  if (httpStatus === 404 || lower.includes('not found') || lower.includes('is not found for api version')) {
+  if (
+    httpStatus === 404
+    || lower.includes('not found')
+    || lower.includes('is not found for api version')
+    || lower.includes('no longer available')
+  ) {
     return { category: 'model_not_found', httpStatus: 404, retryable: false };
   }
   if (lower.includes('safety') || lower.includes('recitation') || lower.includes('blocked')) {
@@ -84,13 +125,10 @@ function classifyGeminiError(err: any): {
   if (httpStatus === 400 || httpStatus === 413 || lower.includes('invalid') || lower.includes('argument')) {
     return { category: 'invalid_request', httpStatus: httpStatus || 400, retryable: false };
   }
-  if (lower.includes('fetch failed') || lower.includes('econnreset') || lower.includes('etimedout') || lower.includes('network')) {
-    return { category: 'unavailable', httpStatus, retryable: true, retryAfterSeconds: 15 };
-  }
   return { category: 'unknown', httpStatus, retryable: true, retryAfterSeconds: 15 };
 }
 
-function effectiveMaxOutputTokens(modelName: string, requestedMax: number): number {
+export function effectiveMaxOutputTokens(modelName: string, requestedMax: number): number {
   const lower = modelName.toLowerCase();
   if (lower.includes('1.5') || lower.includes('2.0')) {
     return Math.min(requestedMax, 8192);
@@ -124,6 +162,7 @@ function getGenAI(): GoogleGenerativeAI | null {
   const apiKey = getApiKey();
   if (!apiKey) return null;
   if (!genAI || cachedApiKey !== apiKey) {
+    deadModelsUntil.clear();
     cachedApiKey = apiKey;
     genAI = new GoogleGenerativeAI(apiKey);
   }
@@ -133,7 +172,7 @@ function getGenAI(): GoogleGenerativeAI | null {
 async function generateWithCascade(
   systemInstruction: string,
   contents: Content[],
-  config: { temperature: number; topP: number; maxOutputTokens: number; responseMimeType?: string },
+  config: { temperature: number; topP: number; maxOutputTokens: number; responseMimeType?: string; thinkingBudget?: number },
   timeoutMs: number = 8000,
   sanitizedErrors: boolean = false,
   totalTimeoutMs?: number,
@@ -157,6 +196,56 @@ async function generateWithCascade(
 
   const deadline = totalTimeoutMs ? Date.now() + totalTimeoutMs : Infinity;
   const attempts: GeminiAttemptTrace[] = [];
+  const skipCache = process.env.NODE_ENV === 'test';
+
+  const invokeModel = async (
+    modelName: string,
+    useThinkingBudget: boolean,
+    attemptTimeout: number
+  ): Promise<{ text: string } | null> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let abortReject: ((err: Error) => void) | undefined;
+    const onAbort = () => abortReject?.(Object.assign(new Error('ABORTED'), { name: 'AbortError' }));
+    try {
+      const model = ai.getGenerativeModel({ model: modelName });
+      const cappedMaxTokens = effectiveMaxOutputTokens(modelName, config.maxOutputTokens);
+      const genConfig: Record<string, any> = {
+        temperature: config.temperature,
+        topP: config.topP,
+        maxOutputTokens: cappedMaxTokens,
+        ...(config.responseMimeType ? { responseMimeType: config.responseMimeType } : {})
+      };
+      if (
+        useThinkingBudget
+        && config.thinkingBudget !== undefined
+        && !modelName.includes('1.5')
+        && !modelName.includes('2.0')
+      ) {
+        genConfig.thinkingConfig = { thinkingBudget: config.thinkingBudget };
+      }
+
+      const apiCall = model.generateContent(
+        { contents, systemInstruction, generationConfig: genConfig as any },
+        totalTimeoutMs ? { timeout: attemptTimeout } : undefined
+      );
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timeout de ${attemptTimeout}ms excedido na chamada do modelo ${modelName}`)), attemptTimeout);
+      });
+      const races: Array<Promise<any>> = [apiCall, timeoutPromise];
+      if (options?.signal) {
+        races.push(new Promise<never>((_, reject) => {
+          abortReject = reject;
+          options.signal!.addEventListener('abort', onAbort, { once: true });
+        }));
+      }
+      const result = await Promise.race(races);
+      const text = result?.response?.text();
+      return text && text.trim() ? { text: text.trim() } : null;
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (options?.signal) options.signal.removeEventListener('abort', onAbort);
+    }
+  };
 
   const runPass = async (models: string[]): Promise<{ text: string; modelUsed: string } | null> => {
     for (const modelName of models) {
@@ -164,44 +253,37 @@ async function generateWithCascade(
         attempts.push({ model: modelName, category: 'aborted', elapsedMs: 0, retryable: true });
         return null;
       }
+      if (!skipCache) {
+        const deadUntil = deadModelsUntil.get(modelName) || 0;
+        if (deadUntil > Date.now()) continue;
+      }
+
       const remaining = deadline - Date.now();
       const attemptTimeout = Math.min(timeoutMs, remaining);
       if (attemptTimeout <= 0) break;
 
       const startedAt = Date.now();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      let abortReject: ((err: Error) => void) | undefined;
-      const onAbort = () => abortReject?.(Object.assign(new Error('ABORTED'), { name: 'AbortError' }));
-
+      const useThinking = config.thinkingBudget !== undefined;
       try {
-        const model = ai.getGenerativeModel({ model: modelName });
-        const cappedMaxTokens = effectiveMaxOutputTokens(modelName, config.maxOutputTokens);
-        const apiCall = model.generateContent({
-          contents,
-          systemInstruction,
-          generationConfig: {
-            temperature: config.temperature,
-            topP: config.topP,
-            maxOutputTokens: cappedMaxTokens,
-            ...(config.responseMimeType ? { responseMimeType: config.responseMimeType } : {})
+        let out: { text: string } | null = null;
+        try {
+          out = await invokeModel(modelName, useThinking, attemptTimeout);
+        } catch (firstErr: any) {
+          const firstCls = classifyGeminiError(firstErr, options?.signal);
+          if (useThinking && firstCls.category === 'invalid_request' && !options?.signal?.aborted) {
+            const remAfter = Math.min(timeoutMs, deadline - Date.now());
+            if (remAfter > 2000) {
+              out = await invokeModel(modelName, false, remAfter);
+            } else {
+              throw firstErr;
+            }
+          } else {
+            throw firstErr;
           }
-        }, totalTimeoutMs ? { timeout: attemptTimeout } : undefined);
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`Timeout de ${attemptTimeout}ms excedido na chamada do modelo ${modelName}`)), attemptTimeout);
-        });
-        const races: Array<Promise<any>> = [apiCall, timeoutPromise];
-        if (options?.signal) {
-          races.push(new Promise<never>((_, reject) => {
-            abortReject = reject;
-            options.signal!.addEventListener('abort', onAbort, { once: true });
-          }));
         }
 
-        const result = await Promise.race(races);
-        const text = result?.response?.text();
         const durationMs = Date.now() - startedAt;
-        if (text && text.trim()) {
+        if (out) {
           attempts.push({ model: modelName, elapsedMs: durationMs, retryable: false });
           options?.onComplete?.({
             ok: true,
@@ -210,12 +292,15 @@ async function generateWithCascade(
             modelUsed: modelName,
             attempts
           });
-          return { text: text.trim(), modelUsed: modelName };
+          return { text: out.text, modelUsed: modelName };
         }
         attempts.push({ model: modelName, category: 'empty_response', elapsedMs: durationMs, retryable: true });
       } catch (err: any) {
         const durationMs = Date.now() - startedAt;
-        const cls = classifyGeminiError(err);
+        const cls = classifyGeminiError(err, options?.signal);
+        if (!skipCache && cls.category === 'model_not_found') {
+          deadModelsUntil.set(modelName, Date.now() + DEAD_MODEL_TTL_MS);
+        }
         attempts.push({
           model: modelName,
           httpStatus: cls.httpStatus,
@@ -229,30 +314,38 @@ async function generateWithCascade(
             ? `status=${cls.httpStatus ?? 'n/a'} category=${cls.category} durationMs=${durationMs}`
             : err?.message || err
         );
-        if (cls.category === 'aborted') {
+        if (cls.category === 'aborted' || cls.category === 'auth_error') {
           return null;
         }
-      } finally {
-        if (timer) clearTimeout(timer);
-        if (options?.signal) options.signal.removeEventListener('abort', onAbort);
       }
     }
     return null;
   };
 
-  const firstPass = await runPass(CANDIDATE_MODELS);
+  const nowTs = Date.now();
+  const activeModels = skipCache
+    ? CANDIDATE_MODELS
+    : CANDIDATE_MODELS.filter((m) => (deadModelsUntil.get(m) || 0) <= nowTs);
+  const firstList = activeModels.length > 0 ? activeModels : CANDIDATE_MODELS;
+
+  const firstPass = await runPass(firstList);
   if (firstPass) return firstPass;
 
-  const hasTransient = attempts.some((a) => a.category === 'rate_limit' || a.category === 'unavailable');
+  const transientRetryModels = [...new Set(
+    attempts
+      .filter((a) => a.retryable && a.category !== 'aborted' && a.category !== 'auth_error')
+      .map((a) => a.model)
+  )].slice(0, 3);
+
   if (
     options?.retryTransientPass
-    && hasTransient
+    && transientRetryModels.length > 0
     && !options?.signal?.aborted
-    && deadline - Date.now() > 8000
+    && deadline - Date.now() > 6000
   ) {
-    const waited = await sleepAbortable(2200, options?.signal);
+    const waited = await sleepAbortable(1800, options?.signal);
     if (waited) {
-      const retryPass = await runPass(CANDIDATE_MODELS.slice(0, 2));
+      const retryPass = await runPass(transientRetryModels);
       if (retryPass) return retryPass;
     }
   }
@@ -263,7 +356,10 @@ async function generateWithCascade(
     options?.signal?.aborted
       ? 'aborted'
       : lastRetryable?.category || lastWithCategory?.category || 'unknown';
-  const retryable = attempts.length > 0 ? attempts.some((a) => a.retryable) : true;
+  const retryable =
+    primaryCategory === 'auth_error'
+      ? false
+      : attempts.length > 0 ? attempts.some((a) => a.retryable) : true;
   const retryAfterSeconds =
     primaryCategory === 'rate_limit' ? 20
       : retryable ? 15
@@ -547,10 +643,10 @@ export class GeminiService {
     const result = await generateWithCascade(
       instruction,
       [{ role: 'user', parts }],
-      { temperature: 0.1, topP: 0.85, maxOutputTokens: 16384, responseMimeType: 'application/json' },
-      40000,
+      { temperature: 0.1, topP: 0.85, maxOutputTokens: 16384, responseMimeType: 'application/json', thinkingBudget: 0 },
+      22000,
       true,
-      90_000,
+      110_000,
       {
         signal: options?.signal,
         retryTransientPass: true,

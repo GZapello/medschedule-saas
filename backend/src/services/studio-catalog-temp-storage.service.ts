@@ -218,11 +218,23 @@ export class StudioCatalogTempStorageService {
   }
 
   static hasUnexpiredTempFiles(tenantId: string, batchId: string, nowIso = toSqliteUtc(new Date())): boolean {
-    const row = db.prepare(`
-      SELECT COUNT(*) AS cnt FROM studio_catalog_import_temp_files
+    const rows = db.prepare(`
+      SELECT storage_provider, object_key FROM studio_catalog_import_temp_files
       WHERE tenant_id = ? AND batch_id = ? AND temp_state != 'deleted' AND expires_at > ?
-    `).get(tenantId, batchId, nowIso) as { cnt: number } | undefined;
-    return Number(row?.cnt || 0) > 0;
+    `).all(tenantId, batchId, nowIso) as Array<{ storage_provider: string; object_key: string }>;
+    if (rows.length === 0) return false;
+    for (const row of rows) {
+      if (!isSafeCatalogTempKey(row.object_key, tenantId, batchId)) return false;
+      if (row.storage_provider !== 'cloudflare_r2') {
+        try {
+          const fullPath = resolveLocalFilePath(row.object_key, tenantId, batchId);
+          if (!fs.existsSync(fullPath)) return false;
+        } catch {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   static async loadBatchTempInputs(
@@ -386,6 +398,7 @@ export class StudioCatalogTempStorageService {
         UPDATE studio_catalog_imports
         SET retryable = 0,
             error_code = COALESCE(error_code, 'TEMP_FILES_EXPIRED'),
+            error_stage = COALESCE(error_stage, 'temp_storage'),
             status = CASE WHEN status IN ('queued', 'processing') THEN 'failed' ELSE status END,
             error_message = CASE
               WHEN status IN ('queued', 'processing', 'failed') AND (error_message IS NULL OR error_message = '')
@@ -400,45 +413,95 @@ export class StudioCatalogTempStorageService {
     return { batchesCleaned, filesDeleted };
   }
 
-  static async recoverInterruptedJobsOnStartup(): Promise<{ expiredCleaned: number; interruptedMarkedRetryable: number }> {
+  static async recoverInterruptedJobsOnStartup(
+    onResumeJob?: (job: { batchId: string; tenantId: string; actorId: string; requestId: string }) => void,
+    maxAttempts = 3
+  ): Promise<{ expiredCleaned: number; interruptedMarkedRetryable: number; resumedJobs: number; missingTempCleaned: number }> {
     const expiredRes = await this.cleanupExpiredOrAbandonedBatches();
     const stuck = db.prepare(`
-      SELECT id, tenant_id, temp_expires_at
+      SELECT id, tenant_id, actor_id, request_id, attempts, temp_expires_at
       FROM studio_catalog_imports
       WHERE status IN ('queued', 'processing')
-    `).all() as Array<{ id: string; tenant_id: string; temp_expires_at: string | null }>;
+    `).all() as Array<{
+      id: string;
+      tenant_id: string;
+      actor_id: string;
+      request_id: string | null;
+      attempts: number | null;
+      temp_expires_at: string | null;
+    }>;
 
     const nowIso = toSqliteUtc(new Date());
     let interruptedMarkedRetryable = 0;
+    let resumedJobs = 0;
+    let missingTempCleaned = 0;
 
     for (const job of stuck) {
-      const canRetry = this.hasUnexpiredTempFiles(job.tenant_id, job.id, nowIso);
-      if (canRetry) {
+      const canRetryFiles = this.hasUnexpiredTempFiles(job.tenant_id, job.id, nowIso);
+      const currentAttempts = Number(job.attempts || 0);
+      if (canRetryFiles && currentAttempts < maxAttempts) {
         this.markBatchTempRetryAvailable(job.tenant_id, job.id);
-      } else {
-        await this.purgeBatchTempFiles(job.tenant_id, job.id, 'startup_orphan_expired');
+        if (onResumeJob) {
+          const resumeReqId = job.request_id || `req-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+          db.prepare(`
+            UPDATE studio_catalog_imports
+            SET status = 'queued',
+                error_code = NULL,
+                error_message = NULL,
+                error_stage = 'queue_enqueue',
+                attempts = COALESCE(attempts, 0) + 1,
+                request_id = ?,
+                updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'processing')
+          `).run(resumeReqId, job.id, job.tenant_id);
+          onResumeJob({
+            batchId: job.id,
+            tenantId: job.tenant_id,
+            actorId: job.actor_id,
+            requestId: resumeReqId
+          });
+          resumedJobs++;
+          continue;
+        }
+        db.prepare(`
+          UPDATE studio_catalog_imports
+          SET status = 'failed',
+              error_code = 'BACKEND_RESTARTED',
+              error_stage = 'worker_load_temp',
+              error_message = 'O servidor foi reiniciado durante a análise. Clique em "Tentar novamente" para retomar.',
+              retryable = 1,
+              updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'processing')
+        `).run(job.id, job.tenant_id);
+        interruptedMarkedRetryable++;
+        continue;
       }
+
+      await this.purgeBatchTempFiles(job.tenant_id, job.id, 'startup_orphan_expired');
+      const maxedOut = canRetryFiles && currentAttempts >= maxAttempts;
       db.prepare(`
         UPDATE studio_catalog_imports
         SET status = 'failed',
             error_code = ?,
+            error_stage = ?,
             error_message = ?,
-            retryable = ?,
+            retryable = 0,
+            temp_purged_at = COALESCE(temp_purged_at, datetime('now')),
             updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'processing')
       `).run(
-        canRetry ? 'BACKEND_RESTARTED' : 'TEMP_FILES_EXPIRED',
-        canRetry
-          ? 'O servidor foi reiniciado durante a análise. Clique em "Tentar novamente" para retomar.'
-          : 'A análise foi interrompida e os arquivos temporários expiraram. Envie os arquivos novamente.',
-        canRetry ? 1 : 0,
+        maxedOut ? 'MAX_RETRIES_EXCEEDED' : 'BACKEND_RESTARTED_TEMP_UNAVAILABLE',
+        maxedOut ? 'ai_provider' : 'worker_load_temp',
+        maxedOut
+          ? 'Limite máximo de tentativas atingido para este lote após reinicialização. Reenvie os arquivos para iniciar uma nova análise.'
+          : 'A análise foi interrompida durante uma reinicialização e os arquivos temporários voláteis não estão mais disponíveis. Envie os arquivos novamente.',
         job.id,
         job.tenant_id
       );
-      if (canRetry) interruptedMarkedRetryable++;
+      missingTempCleaned++;
     }
 
-    return { expiredCleaned: expiredRes.filesDeleted, interruptedMarkedRetryable };
+    return { expiredCleaned: expiredRes.filesDeleted, interruptedMarkedRetryable, resumedJobs, missingTempCleaned };
   }
 
   static startCleanupWorker(intervalMs = 15 * 60_000): void {

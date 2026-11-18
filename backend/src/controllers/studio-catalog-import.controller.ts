@@ -21,8 +21,11 @@ import {
 import type {
   CatalogImportBatchStatus,
   CatalogImportErrorCategory,
+  CatalogImportStage,
   StudioProposal
 } from '../shared/studio-catalog-contract';
+
+const MAX_CATALOG_IMPORT_ATTEMPTS = 3;
 
 interface Draft {
   id: string;
@@ -36,12 +39,40 @@ interface Draft {
   status: CatalogImportBatchStatus;
   error_code: string | null;
   error_message: string | null;
+  error_stage: string | null;
+  diagnostic_json: string | null;
   request_id: string | null;
   attempts: number;
   retryable: number;
   temp_expires_at: string | null;
   temp_purged_at: string | null;
   updated_at: string;
+}
+
+function safeParseJson<T = Record<string, any>>(raw: string | null | undefined): T | null {
+  if (!raw || typeof raw !== 'string') return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function buildSanitizedDiagnostic(params: {
+  storageProvider?: string | null;
+  diag?: GeminiCatalogDiagnostic | null;
+  stageTimingsMs?: Record<string, number>;
+  attemptsCount?: number;
+  lastStage?: CatalogImportStage | null;
+}): string {
+  return JSON.stringify({
+    storageProvider: params.storageProvider || null,
+    modelUsed: params.diag?.modelUsed || null,
+    stageTimingsMs: params.stageTimingsMs || {},
+    attemptsCount: typeof params.attemptsCount === 'number' ? params.attemptsCount : (params.diag?.attempts?.length || 0),
+    lastCategory: params.diag?.reason || (params.diag?.ok ? 'ok' : null),
+    lastStage: params.lastStage || null
+  });
 }
 
 const activeJobs = new Map<string, { tenantId: string; abortController: AbortController; requestId: string }>();
@@ -71,14 +102,26 @@ function activeJobCountForTenant(tenantId: string): number {
 function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
   status: number;
   code: string;
+  stage: CatalogImportStage;
   message: string;
   retryable: boolean;
   retryAfterSeconds: number | null;
 } {
+  if (diag?.reason === 'auth_error') {
+    return {
+      status: 503,
+      code: 'AI_AUTH_ERROR',
+      stage: 'ai_provider',
+      message: 'A credencial do provedor de IA está expirada, inválida ou sem permissão. Verifique a configuração do servidor.',
+      retryable: false,
+      retryAfterSeconds: null
+    };
+  }
   if (diag?.reason === 'not_configured' || (!diag && !GeminiService.isConfigured())) {
     return {
       status: 503,
       code: 'AI_NOT_CONFIGURED',
+      stage: 'ai_provider',
       message: 'A análise por IA está indisponível neste momento.',
       retryable: false,
       retryAfterSeconds: null
@@ -88,6 +131,7 @@ function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
     return {
       status: 503,
       code: 'AI_PROVIDER_UNAVAILABLE',
+      stage: 'ai_provider',
       message: 'O provedor de IA não retornou resposta desta vez. Tente novamente sem reenviar os arquivos dentro do prazo temporário.',
       retryable: true,
       retryAfterSeconds: 15
@@ -97,8 +141,9 @@ function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
     return {
       status: 499,
       code: 'CANCELLED_BY_USER',
+      stage: 'cancelled',
       message: 'Análise cancelada pelo usuário.',
-      retryable: true,
+      retryable: false,
       retryAfterSeconds: null
     };
   }
@@ -106,16 +151,28 @@ function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
     return {
       status: 503,
       code: 'AI_RATE_LIMITED',
+      stage: 'ai_provider',
       message: 'O provedor de IA está com alto volume de solicitações no momento. Os arquivos temporários foram preservados por tempo limitado para nova tentativa.',
       retryable: true,
       retryAfterSeconds: diag.retryAfterSeconds || 20
     };
   }
-  if (diag.reason === 'timeout' || diag.reason === 'unavailable') {
+  if (diag.reason === 'timeout') {
+    return {
+      status: 503,
+      code: 'AI_TIMEOUT',
+      stage: 'ai_provider',
+      message: 'O serviço de IA demorou para responder e atingiu o tempo limite. Você pode tentar novamente sem reenviar os arquivos dentro do prazo temporário.',
+      retryable: true,
+      retryAfterSeconds: diag.retryAfterSeconds || 15
+    };
+  }
+  if (diag.reason === 'unavailable') {
     return {
       status: 503,
       code: 'AI_PROVIDER_UNAVAILABLE',
-      message: 'O serviço de IA demorou para responder ou ficou temporariamente instável. Você pode tentar novamente sem reenviar os arquivos dentro do prazo temporário.',
+      stage: 'ai_provider',
+      message: 'O serviço de IA ficou temporariamente instável. Você pode tentar novamente sem reenviar os arquivos dentro do prazo temporário.',
       retryable: true,
       retryAfterSeconds: diag.retryAfterSeconds || 15
     };
@@ -124,6 +181,7 @@ function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
     return {
       status: 422,
       code: 'AI_INVALID_OR_BLOCKED',
+      stage: 'ai_provider',
       message: 'Os arquivos não puderam ser processados pelo analisador visual. Envie imagens ou documentos mais nítidos do catálogo.',
       retryable: false,
       retryAfterSeconds: null
@@ -133,6 +191,7 @@ function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
     return {
       status: 422,
       code: 'AI_INVALID_JSON',
+      stage: 'ai_response_parse',
       message: 'A resposta estruturada da IA veio incompleta desta vez. Tente novamente ou envie menos itens por lote.',
       retryable: true,
       retryAfterSeconds: 10
@@ -141,6 +200,7 @@ function friendlyAiFailureMessage(diag?: GeminiCatalogDiagnostic | null): {
   return {
     status: 422,
     code: 'AI_UNREADABLE_CONTENT',
+    stage: 'ai_response_parse',
     message: 'A IA não conseguiu extrair itens válidos destes arquivos. Tente novamente ou envie um lote menor e mais nítido.',
     retryable: true,
     retryAfterSeconds: 10
@@ -152,13 +212,17 @@ function classifyBatchErrorCategory(status: string, errorCode: string | null): C
   if (errorCode === 'TEMP_FILES_EXPIRED' || errorCode === 'BACKEND_RESTARTED_TEMP_UNAVAILABLE') {
     return 'expired';
   }
+  if (errorCode === 'AI_AUTH_ERROR' || errorCode === 'AI_NOT_CONFIGURED') {
+    return 'auth_error';
+  }
   if (errorCode === 'AI_INVALID_OR_BLOCKED' || errorCode === 'AI_UNREADABLE_CONTENT') {
     return 'validation_error';
   }
   if (
     errorCode === 'AI_RATE_LIMITED'
     || errorCode === 'AI_PROVIDER_UNAVAILABLE'
-    || errorCode === 'AI_NOT_CONFIGURED'
+    || errorCode === 'AI_TIMEOUT'
+    || errorCode === 'MAX_RETRIES_EXCEEDED'
     || errorCode === 'TEMP_STAGE_ERROR'
     || errorCode === 'ASYNC_JOB_ERROR'
     || errorCode === 'BACKEND_RESTARTED'
@@ -183,6 +247,7 @@ function statusResponseFor(draft: Draft) {
     id: draft.id,
     status: effectiveStatus,
     errorCategory: classifyBatchErrorCategory(effectiveStatus, draft.error_code || null),
+    errorStage: (draft.error_stage as CatalogImportStage) || null,
     hasExtractedData,
     requestId: draft.request_id || null,
     errorCode: draft.error_code || null,
@@ -190,6 +255,8 @@ function statusResponseFor(draft: Draft) {
     retryable: Boolean(draft.retryable),
     retryAfterSeconds: effectiveStatus === 'failed' && draft.retryable ? 15 : null,
     attempts: Number(draft.attempts || 0),
+    maxAttempts: MAX_CATALOG_IMPORT_ATTEMPTS,
+    diagnostic: safeParseJson(draft.diagnostic_json),
     tempExpiresAt: draft.temp_expires_at || null,
     tempPurgedAt: draft.temp_purged_at || null,
     revision: draft.revision,
@@ -288,6 +355,7 @@ function startAsyncCatalogJob(params: {
   activeJobs.set(batchId, { tenantId, abortController, requestId });
 
   setImmediate(async () => {
+    const jobStartedAt = Date.now();
     try {
       const current = db.prepare(`
         SELECT * FROM studio_catalog_imports
@@ -298,29 +366,61 @@ function startAsyncCatalogJob(params: {
         return;
       }
 
+      const existingDiag = safeParseJson<Record<string, any>>(current.diagnostic_json) || {};
+      const prevTimings = (existingDiag.stageTimingsMs && typeof existingDiag.stageTimingsMs === 'object')
+        ? existingDiag.stageTimingsMs
+        : {};
+      const currentAttempts = Math.max(1, Number(current.attempts || 1));
+
       db.prepare(`
         UPDATE studio_catalog_imports
-        SET status = 'processing', request_id = ?, updated_at = datetime('now')
+        SET status = 'processing', error_stage = 'worker_load_temp', request_id = ?, updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ? AND actor_id = ? AND status = 'queued'
       `).run(requestId, batchId, tenantId, actorId);
 
+      const loadStartedAt = Date.now();
       const inputs = await StudioCatalogTempStorageService.loadBatchTempInputs(tenantId, batchId);
+      const loadMs = Date.now() - loadStartedAt;
       if (!inputs.length) {
+        const missingDiagJson = buildSanitizedDiagnostic({
+          storageProvider: existingDiag.storageProvider || null,
+          stageTimingsMs: { ...prevTimings, loadTempMs: loadMs, totalWorkerMs: Date.now() - jobStartedAt },
+          attemptsCount: currentAttempts,
+          lastStage: 'worker_load_temp'
+        });
         db.prepare(`
           UPDATE studio_catalog_imports
-          SET status = 'failed', error_code = 'TEMP_FILES_EXPIRED',
+          SET status = 'failed',
+              error_code = 'TEMP_FILES_EXPIRED',
               error_message = 'Os arquivos temporários deste lote expiraram ou não foram localizados. Envie os arquivos novamente.',
-              retryable = 0, updated_at = datetime('now')
+              error_stage = 'worker_load_temp',
+              diagnostic_json = ?,
+              retryable = 0,
+              updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
-        `).run(batchId, tenantId);
+        `).run(missingDiagJson, batchId, tenantId);
         await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantId, batchId, 'missing_or_expired');
         return;
       }
 
+      db.prepare(`
+        UPDATE studio_catalog_imports
+        SET error_stage = 'ai_provider', updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ? AND status = 'processing'
+      `).run(batchId, tenantId);
+
+      const extractStartedAt = Date.now();
       const { proposal, diag, emptyExtraction } = await runGeminiExtraction(inputs, {
         requestId,
         signal: abortController.signal
       });
+      const extractMs = Date.now() - extractStartedAt;
+      const stageTimingsMs = {
+        ...prevTimings,
+        loadTempMs: loadMs,
+        aiExtractMs: extractMs,
+        totalWorkerMs: Date.now() - jobStartedAt
+      };
 
       const afterExtract = db.prepare(`
         SELECT status, result_json FROM studio_catalog_imports WHERE id = ? AND tenant_id = ?
@@ -331,6 +431,14 @@ function startAsyncCatalogJob(params: {
       }
 
       if (proposal) {
+        const readyDiagJson = buildSanitizedDiagnostic({
+          storageProvider: existingDiag.storageProvider || null,
+          diag,
+          stageTimingsMs,
+          attemptsCount: currentAttempts,
+          lastStage: 'completed'
+        });
+
         db.transaction(() => {
           db.prepare(`
             UPDATE studio_catalog_imports
@@ -338,11 +446,13 @@ function startAsyncCatalogJob(params: {
                 status = 'ready',
                 error_code = NULL,
                 error_message = NULL,
+                error_stage = 'completed',
+                diagnostic_json = ?,
                 retryable = 0,
                 revision = revision + 1,
                 updated_at = datetime('now')
             WHERE id = ? AND tenant_id = ? AND actor_id = ? AND status IN ('queued', 'processing')
-          `).run(JSON.stringify(proposal), batchId, tenantId, actorId);
+          `).run(JSON.stringify(proposal), readyDiagJson, batchId, tenantId, actorId);
 
           db.prepare(`
             INSERT INTO audit_logs (
@@ -371,18 +481,78 @@ function startAsyncCatalogJob(params: {
       const fail = emptyExtraction
         ? {
             code: 'AI_UNREADABLE_CONTENT',
+            stage: 'ai_response_parse' as CatalogImportStage,
             message: 'Nenhum serviço ou pacote foi identificado nestes arquivos. Envie imagens ou planilhas mais legíveis.',
             retryable: false
           }
         : friendlyAiFailureMessage(diag);
 
-      const canKeepTempForRetry =
-        fail.retryable && StudioCatalogTempStorageService.hasUnexpiredTempFiles(tenantId, batchId);
+      const maxAttemptsReached = currentAttempts >= MAX_CATALOG_IMPORT_ATTEMPTS;
+      const hasTemp = StudioCatalogTempStorageService.hasUnexpiredTempFiles(tenantId, batchId);
+      const canKeepTempForRetry = fail.retryable && !maxAttemptsReached && hasTemp;
+
+      const finalCode = (fail.retryable && maxAttemptsReached) ? 'MAX_RETRIES_EXCEEDED' : fail.code;
+      const finalMessage = (fail.retryable && maxAttemptsReached)
+        ? `O limite máximo de ${MAX_CATALOG_IMPORT_ATTEMPTS} tentativas foi atingido sem resposta válida da IA. Envie os arquivos novamente.`
+        : fail.message;
 
       if (canKeepTempForRetry) {
         StudioCatalogTempStorageService.markBatchTempRetryAvailable(tenantId, batchId);
       } else {
-        await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantId, batchId, 'non_retryable_failure');
+        await StudioCatalogTempStorageService.purgeBatchTempFiles(
+          tenantId,
+          batchId,
+          (fail.retryable && maxAttemptsReached) ? 'max_retries_exceeded' : 'non_retryable_failure'
+        );
+      }
+
+      const failDiagJson = buildSanitizedDiagnostic({
+        storageProvider: existingDiag.storageProvider || null,
+        diag,
+        stageTimingsMs,
+        attemptsCount: currentAttempts,
+        lastStage: fail.stage
+      });
+
+      db.prepare(`
+        UPDATE studio_catalog_imports
+        SET status = 'failed',
+            error_code = ?,
+            error_message = ?,
+            error_stage = ?,
+            diagnostic_json = ?,
+            retryable = ?,
+            updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ? AND actor_id = ? AND status IN ('queued', 'processing')
+      `).run(finalCode, finalMessage, fail.stage, failDiagJson, canKeepTempForRetry ? 1 : 0, batchId, tenantId, actorId);
+    } catch (err: any) {
+      const msg = err?.message || 'Erro inesperado durante análise assíncrona.';
+      ErrorMonitor.captureException(err, { source: 'studio-catalog-import-job', tenantId, userId: actorId });
+      console.error(`[StudioCatalogImport] [${requestId}] Erro no worker assíncrono:`, msg);
+
+      const latestRow = db.prepare(`
+        SELECT attempts, error_stage, diagnostic_json FROM studio_catalog_imports WHERE id = ? AND tenant_id = ?
+      `).get(batchId, tenantId) as { attempts?: number; error_stage?: string | null; diagnostic_json?: string | null } | undefined;
+      const currentAttempts = Math.max(1, Number(latestRow?.attempts || 1));
+      const maxAttemptsReached = currentAttempts >= MAX_CATALOG_IMPORT_ATTEMPTS;
+      const keepForRetry = !maxAttemptsReached && StudioCatalogTempStorageService.hasUnexpiredTempFiles(tenantId, batchId);
+      const failStage = (latestRow?.error_stage as CatalogImportStage) || 'worker_load_temp';
+      const latestDiag = safeParseJson<Record<string, any>>(latestRow?.diagnostic_json) || {};
+      const errDiagJson = buildSanitizedDiagnostic({
+        storageProvider: latestDiag.storageProvider || null,
+        stageTimingsMs: { ...(latestDiag.stageTimingsMs || {}), totalWorkerMs: Date.now() - jobStartedAt },
+        attemptsCount: currentAttempts,
+        lastStage: failStage
+      });
+
+      if (keepForRetry) {
+        StudioCatalogTempStorageService.markBatchTempRetryAvailable(tenantId, batchId);
+      } else {
+        await StudioCatalogTempStorageService.purgeBatchTempFiles(
+          tenantId,
+          batchId,
+          maxAttemptsReached ? 'max_retries_exceeded' : 'worker_exception'
+        ).catch(() => {});
       }
 
       db.prepare(`
@@ -390,31 +560,22 @@ function startAsyncCatalogJob(params: {
         SET status = 'failed',
             error_code = ?,
             error_message = ?,
-            retryable = ?,
-            updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ? AND actor_id = ? AND status IN ('queued', 'processing')
-      `).run(fail.code, fail.message, canKeepTempForRetry ? 1 : 0, batchId, tenantId, actorId);
-    } catch (err: any) {
-      const msg = err?.message || 'Erro inesperado durante análise assíncrona.';
-      ErrorMonitor.captureException(err, { source: 'studio-catalog-import-job', tenantId, userId: actorId });
-      console.error(`[StudioCatalogImport] [${requestId}] Erro no worker assíncrono:`, msg);
-
-      const keepForRetry = StudioCatalogTempStorageService.hasUnexpiredTempFiles(tenantId, batchId);
-      if (keepForRetry) {
-        StudioCatalogTempStorageService.markBatchTempRetryAvailable(tenantId, batchId);
-      } else {
-        await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantId, batchId, 'worker_exception').catch(() => {});
-      }
-
-      db.prepare(`
-        UPDATE studio_catalog_imports
-        SET status = 'failed',
-            error_code = 'ASYNC_JOB_ERROR',
-            error_message = 'Falha interna temporária durante o processamento da análise. Tente novamente.',
+            error_stage = ?,
+            diagnostic_json = ?,
             retryable = ?,
             updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'processing')
-      `).run(keepForRetry ? 1 : 0, batchId, tenantId);
+      `).run(
+        maxAttemptsReached ? 'MAX_RETRIES_EXCEEDED' : 'ASYNC_JOB_ERROR',
+        maxAttemptsReached
+          ? `O limite máximo de ${MAX_CATALOG_IMPORT_ATTEMPTS} tentativas foi atingido durante o processamento.`
+          : 'Falha interna temporária durante o processamento da análise. Tente novamente.',
+        failStage,
+        errDiagJson,
+        keepForRetry ? 1 : 0,
+        batchId,
+        tenantId
+      );
     } finally {
       activeJobs.delete(batchId);
     }
@@ -422,14 +583,23 @@ function startAsyncCatalogJob(params: {
 }
 
 export class StudioCatalogImportController {
+  static resumeBackgroundJob(params: {
+    batchId: string;
+    tenantId: string;
+    actorId: string;
+    requestId: string;
+  }): void {
+    startAsyncCatalogJob(params);
+  }
+
   static async list(req: Request, res: Response) {
     try {
       await StudioCatalogTempStorageService.cleanupExpiredOrAbandonedBatches();
       const includeCompleted = req.query.includeCompleted === '1' || req.query.includeCompleted === 'true';
       const rows = db.prepare(`
         SELECT id, tenant_id, actor_id, fingerprint, sources_json, proposal_json, result_json,
-               revision, status, error_code, error_message, request_id, attempts, retryable,
-               temp_expires_at, temp_purged_at, updated_at
+               revision, status, error_code, error_message, error_stage, diagnostic_json,
+               request_id, attempts, retryable, temp_expires_at, temp_purged_at, updated_at
         FROM studio_catalog_imports
         WHERE tenant_id = ? AND actor_id = ? ${includeCompleted ? '' : 'AND result_json IS NULL'}
         ORDER BY updated_at DESC LIMIT 30
@@ -479,6 +649,7 @@ export class StudioCatalogImportController {
         SET status = 'cancelled',
             error_code = 'CANCELLED_BY_USER',
             error_message = 'Análise cancelada pelo usuário e arquivos temporários removidos.',
+            error_stage = 'cancelled',
             retryable = 0,
             temp_purged_at = COALESCE(temp_purged_at, datetime('now')),
             updated_at = datetime('now')
@@ -566,11 +737,13 @@ export class StudioCatalogImportController {
 
       inFlightAnalyzeByKey.set(lockKey, requestId);
       try {
+        const analyzeStartAt = Date.now();
         const preparedInputs: PreparedCatalogInput[] = [];
         for (const file of files) {
           const prep = await prepareCatalogFile(file);
           preparedInputs.push({ ...prep, fingerprint: file.fingerprint });
         }
+        const prepareMs = Date.now() - analyzeStartAt;
         const sources = files.map((file, i) => ({
           id: i + 1,
           fileName: file.fileName,
@@ -583,6 +756,11 @@ export class StudioCatalogImportController {
 
         if (isAsync) {
           const expiresAtIso = computeTempExpiryIso();
+          const initialDiagJson = buildSanitizedDiagnostic({
+            stageTimingsMs: { prepareMs },
+            attemptsCount: 1,
+            lastStage: 'queue_enqueue'
+          });
           const targetBatchId = db.transaction(() => {
             const existing = lookup.get(tenantId, actorId, fingerprint) as Draft | undefined;
             const batchId = existing?.id || saved?.id || randomUUID();
@@ -594,21 +772,23 @@ export class StudioCatalogImportController {
                     status = 'queued',
                     error_code = NULL,
                     error_message = NULL,
+                    error_stage = 'queue_enqueue',
+                    diagnostic_json = ?,
                     request_id = ?,
-                    attempts = COALESCE(attempts, 0) + 1,
+                    attempts = 1,
                     retryable = 0,
                     temp_expires_at = ?,
                     temp_purged_at = NULL,
                     updated_at = datetime('now')
                 WHERE id = ? AND tenant_id = ? AND actor_id = ?
-              `).run(JSON.stringify(sources), requestId, expiresAtIso, existing.id, tenantId, actorId);
+              `).run(JSON.stringify(sources), initialDiagJson, requestId, expiresAtIso, existing.id, tenantId, actorId);
             } else {
               db.prepare(`
                 INSERT INTO studio_catalog_imports (
                   id, tenant_id, actor_id, fingerprint, sources_json, proposal_json,
-                  status, request_id, attempts, retryable, temp_expires_at
-                ) VALUES (?, ?, ?, ?, ?, '{"services":[],"packages":[]}', 'queued', ?, 1, 0, ?)
-              `).run(batchId, tenantId, actorId, fingerprint, JSON.stringify(sources), requestId, expiresAtIso);
+                  status, error_stage, diagnostic_json, request_id, attempts, retryable, temp_expires_at
+                ) VALUES (?, ?, ?, ?, ?, '{"services":[],"packages":[]}', 'queued', 'queue_enqueue', ?, ?, 1, 0, ?)
+              `).run(batchId, tenantId, actorId, fingerprint, JSON.stringify(sources), initialDiagJson, requestId, expiresAtIso);
             }
             logAudit(req, 'QUEUE_STUDIO_CATALOG_IMPORT', 'studio_catalog_imports', batchId, {
               requestId,
@@ -619,6 +799,7 @@ export class StudioCatalogImportController {
           })();
 
           let stagedProvider = 'local_tmp';
+          const stageStartedAt = Date.now();
           try {
             const staged = await StudioCatalogTempStorageService.stageBatchTempFiles({
               tenantId,
@@ -628,20 +809,41 @@ export class StudioCatalogImportController {
             });
             stagedProvider = staged.provider;
           } catch (stageErr) {
+            const failedStageDiag = buildSanitizedDiagnostic({
+              storageProvider: stagedProvider,
+              stageTimingsMs: { prepareMs, stageMs: Date.now() - stageStartedAt },
+              attemptsCount: 1,
+              lastStage: 'temp_storage'
+            });
             db.prepare(`
               UPDATE studio_catalog_imports
               SET status = 'failed',
                   error_code = 'TEMP_STAGE_ERROR',
                   error_message = 'Não foi possível preparar a área temporária dos arquivos. Tente novamente.',
+                  error_stage = 'temp_storage',
+                  diagnostic_json = ?,
                   retryable = 0,
                   temp_purged_at = datetime('now'),
                   updated_at = datetime('now')
               WHERE id = ? AND tenant_id = ? AND status = 'queued'
-            `).run(targetBatchId, tenantId);
+            `).run(failedStageDiag, targetBatchId, tenantId);
             throw stageErr;
           }
 
-          console.info(`[StudioCatalogImport] [${requestId}] lote=${targetBatchId} enfileirado (provider=${stagedProvider}, arquivos=${preparedInputs.length})`);
+          const stageMs = Date.now() - stageStartedAt;
+          const queuedDiagJson = buildSanitizedDiagnostic({
+            storageProvider: stagedProvider,
+            stageTimingsMs: { prepareMs, stageMs },
+            attemptsCount: 1,
+            lastStage: 'queue_enqueue'
+          });
+          db.prepare(`
+            UPDATE studio_catalog_imports
+            SET diagnostic_json = ?, updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ?
+          `).run(queuedDiagJson, targetBatchId, tenantId);
+
+          console.info(`[StudioCatalogImport] [${requestId}] lote=${targetBatchId} enfileirado (provider=${stagedProvider}, arquivos=${preparedInputs.length}, prepareMs=${prepareMs}, stageMs=${stageMs})`);
           const queuedDraft = lookup.get(tenantId, actorId, fingerprint) as Draft;
           startAsyncCatalogJob({ batchId: queuedDraft.id, tenantId, actorId, requestId });
           res.status(202).json(statusResponseFor(queuedDraft));
@@ -744,6 +946,28 @@ export class StudioCatalogImportController {
           retryable: false
         });
       }
+      const currentAttempts = Number(current.attempts || 0);
+      if (currentAttempts >= MAX_CATALOG_IMPORT_ATTEMPTS || current.error_code === 'MAX_RETRIES_EXCEEDED') {
+        await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantId, current.id, 'max_retries_exceeded');
+        db.prepare(`
+          UPDATE studio_catalog_imports
+          SET status = 'failed',
+              retryable = 0,
+              error_code = 'MAX_RETRIES_EXCEEDED',
+              error_message = ?,
+              temp_purged_at = COALESCE(temp_purged_at, datetime('now')),
+              updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          `O limite máximo de ${MAX_CATALOG_IMPORT_ATTEMPTS} tentativas deste lote foi atingido. Envie os arquivos novamente.`,
+          current.id,
+          tenantId
+        );
+        throw Object.assign(
+          catalogError(`O limite máximo de ${MAX_CATALOG_IMPORT_ATTEMPTS} tentativas deste lote foi atingido. Envie os arquivos novamente.`, 409),
+          { code: 'MAX_RETRIES_EXCEEDED', retryable: false, batchId: current.id }
+        );
+      }
       if (!StudioCatalogTempStorageService.hasUnexpiredTempFiles(tenantId, current.id)) {
         await StudioCatalogTempStorageService.purgeBatchTempFiles(tenantId, current.id, 'expired_on_retry');
         db.prepare(`
@@ -774,6 +998,7 @@ export class StudioCatalogImportController {
         SET status = 'queued',
             error_code = NULL,
             error_message = NULL,
+            error_stage = 'queue_enqueue',
             request_id = ?,
             attempts = COALESCE(attempts, 0) + 1,
             retryable = 0,
@@ -828,6 +1053,7 @@ export class StudioCatalogImportController {
           SET proposal_json = ?,
               result_json = ?,
               status = 'completed',
+              error_stage = 'completed',
               retryable = 0,
               temp_purged_at = COALESCE(temp_purged_at, datetime('now')),
               revision = revision + 1,
