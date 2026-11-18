@@ -51,6 +51,10 @@ const fixture = {
       monthly(120000, 2, { unit: 'contract_total', duration: '12_months', paymentPeriod: 'installments', installments: 12 })
     ] }),
     scheduled('Dança', 'group', { capacity: 12, schedules: [slot(2, '09:00', '09:50'), slot(4, '10:00', '10:50')] }),
+    scheduled('Zumba', 'group', { durationMinutes: 60, capacity: 12, schedules: [
+      { ...slot(3, '19:00', '20:00'), professionalName: 'Profa. Ana' },
+      { ...slot(5, '19:00', '19:45'), professionalName: 'Bia' }
+    ] }),
     { name: 'Avaliação', type: 'deliverable', sources: [3] },
     scheduled('Plano ambíguo', 'individual', { prices: [{ label: 'Anual', amountCents: 9900, evidence: 'Anual R$ 99', sources: [4] }] }),
     { name: 'Documento incompleto', type: 'individual', sources: [5] }
@@ -93,6 +97,14 @@ async function main() {
   const mixed = seed('mixed-fixture', 'mixed');
   const clinic = seed('clinic-fixture', 'clinic');
   const denied = seed('denied-fixture', 'studio', 'receptionist');
+  db.prepare(`INSERT INTO professionals (id, tenant_id, name, profession_id, profession_name, active)
+    VALUES (?, 'studio-fixture', ?, 'prof-personal-trainer', 'Personal Trainer', ?)`).run('prof-bia', 'Bia', 1);
+  db.prepare("INSERT INTO professionals (id, tenant_id, name, active) VALUES ('prof-inativa', 'studio-fixture', 'Inativa', 0)").run();
+  const shift = db.prepare(`INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, break_start, break_end)
+    VALUES (?, 'studio-fixture', ?, ?, ?, ?, ?, ?)`);
+  shift.run('wed-first', studio.profId, 3, '19:00', '19:30', null, null);
+  shift.run('wed-second', studio.profId, 3, '19:30', '20:00', null, null);
+  shift.run('fri-evening', 'prof-bia', 5, '17:00', '19:45', '18:30', '19:00');
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   const url = 'http://127.0.0.1:' + server.address().port + '/api';
   async function call(method, route, actor = studio, body) {
@@ -146,7 +158,8 @@ async function main() {
     assert.equal((await call('POST', endpoint + '/analyze', studio, { files: [upload('falso.pdf', 'não é PDF')] })).status, 400);
     const draft = await ok('POST', endpoint + '/analyze', studio, { files });
     assert.equal(draft.sources[0].copies, 2);
-    assert.equal(draft.proposal.services.length, 11);
+    assert.equal(draft.proposal.services.length, 12);
+    assert.deepEqual(draft.catalog.professionals.map(p => p.id).sort(), ['prof-bia', studio.profId].sort());
     assert.equal(draft.proposal.services.find(r => r.name === 'Pilates Individual').prices.length, 2);
     assert.equal(draft.proposal.services.find(r => r.name === 'Plano ambíguo').prices[0].unit, null);
     assert.ok(draft.proposal.services.find(r => r.name === 'Documento incompleto').issues.length);
@@ -169,6 +182,11 @@ async function main() {
       row.reviewed = true;
       for (const item of row.items) item.serviceRef = find(item.serviceName).key;
     }
+    const zumba = find('Zumba');
+    const [wed, fri] = zumba.schedules;
+    assert.equal(wed.professionalId, '');
+    assert.equal(wed.professionalName, 'Profa. Ana');
+    fri.professionalId = 'prof-bia';
     const urlDraft = endpoint + '/' + draft.id;
     const saved = await ok('PUT', urlDraft, studio, { proposal, revision: draft.revision });
     assert.equal((await ok('GET', endpoint, studio))[0].id, draft.id);
@@ -188,9 +206,31 @@ async function main() {
     dance.schedules[0].startTime = '06:00';
     assert.match((await confirm()).data.error, /escala/);
     dance.schedules[0].startTime = originalStart;
+    async function rejectsZumba(pattern) {
+      const failure = await confirm();
+      assert.equal(failure.status, 400);
+      assert.match(failure.data.error, pattern);
+      assert.equal(db.prepare('SELECT COUNT(*) n FROM class_schedules WHERE tenant_id = ?').get('studio-fixture').n, 0);
+    }
+    for (const invalidId of ['user-studio-fixture', mixed.profId, 'prof-inativa']) {
+      fri.professionalId = invalidId;
+      await rejectsZumba(/Zumba.*Sexta-feira.*19:00–19:45.*profissional ativo/);
+    }
+    fri.professionalId = '';
+    await rejectsZumba(/Sexta-feira.*19:00–19:45.*escala de Ana.*07:00–18:00/);
+    fri.professionalId = 'prof-bia';
+    fri.endTime = '19:46';
+    await rejectsZumba(/Sexta-feira.*19:00–19:46.*escala de Bia.*19:00–19:45/);
+    fri.endTime = '19:45';
+    fri.startTime = '18:59';
+    await rejectsZumba(/Sexta-feira.*18:59–19:45.*escala de Bia.*17:00–18:30, 19:00–19:45/);
+    fri.startTime = '19:00';
+    fri.dayOfWeek = 6;
+    await rejectsZumba(/Sábado.*19:00–19:45.*escala de Bia.*Nenhuma faixa/);
+    fri.dayOfWeek = 5;
     const result = await confirm();
     assert.equal(result.status, 200, JSON.stringify(result));
-    assert.equal(result.data.result.services.length, 9);
+    assert.equal(result.data.result.services.length, 10);
     assert.equal(result.data.result.packages.length, 2);
     assert.deepEqual((await confirm()).data.result, result.data.result);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM audit_logs WHERE action = 'CONFIRM_STUDIO_CATALOG_IMPORT' AND tenant_id = ?").get('studio-fixture').n, 1);
@@ -206,6 +246,8 @@ async function main() {
     assert.equal(service('Pilates em Grupo').default_capacity, 8);
     assert.equal(service('Funcional').commercial_price_options[2].installmentsCount, 12);
     assert.equal(service('Dança').class_schedules.length, 2);
+    assert.deepEqual(service('Zumba').class_schedules.map(s => [s.day_of_week, s.start_time, s.end_time, s.professional_id])
+      .sort((a, b) => a[0] - b[0]), [[3, '19:00', '20:00', studio.profId], [5, '19:00', '19:45', 'prof-bia']]);
     assert.equal(service('Avaliação').requires_appointment, 0);
     const nextMonday = new Date();
     nextMonday.setUTCDate(nextMonday.getUTCDate() + ((8 - nextMonday.getUTCDay()) % 7 || 7));
@@ -245,7 +287,10 @@ async function main() {
       services: [
         { name: 'Musculação', type: 'access_unlimited', prices: [monthly(99900)] },
         { name: 'Dança', type: 'group' },
-        { name: 'Pilates em Grupo', type: 'group' }
+        { name: 'Pilates em Grupo', type: 'group' },
+        { name: 'Pilates Individual', type: 'individual', schedules: [
+          { ...slot(2, '10:00', '10:40'), professionalName: 'Profa. Ana' }
+        ] }
       ], packages: []
     });
     const duplicates = await ok('POST', endpoint + '/analyze', studio, { files: [upload('revisao.csv', 'Plano,Valor\nMusculação,999')] });
@@ -260,8 +305,23 @@ async function main() {
       .run(danceId, studio.profId);
     Object.assign(duplicates.proposal.services[1], { action: 'update', apply: ['identity'], reviewed: true, existingId: danceId, notes: 'Aulas para iniciantes.' });
     Object.assign(duplicates.proposal.services[2], { action: 'link', reviewed: true, existingId: service('Pilates em Grupo').id });
+    const pilatesId = service('Pilates Individual').id;
+    assert.equal(duplicates.catalog.services.find(s => s.id === pilatesId).professionalId, studio.profId);
+    db.prepare('UPDATE professional_services SET custom_duration = 40 WHERE service_id = ? AND professional_id = ?')
+      .run(pilatesId, studio.profId);
+    const pilatesUpdate = duplicates.proposal.services[3];
+    Object.assign(pilatesUpdate, { action: 'update', apply: ['schedules'], reviewed: true, existingId: pilatesId, professionalId: 'prof-bia' });
+    const pilatesSlot = pilatesUpdate.schedules[0];
+    pilatesSlot.professionalId = 'prof-bia';
+    assert.match((await retry()).data.error, /Terça-feira.*10:00–10:40.*escala de Bia/);
+    pilatesSlot.professionalId = '';
+    pilatesSlot.endTime = '10:39';
+    assert.match((await retry()).data.error, /Terça-feira.*10:00–10:39.*Ana.*40 minutos/);
+    pilatesSlot.endTime = '10:40';
     const updateResult = await retry();
     assert.equal(updateResult.status, 200, JSON.stringify(updateResult));
+    assert.equal(db.prepare(`SELECT professional_id FROM service_availability_windows WHERE service_id = ?
+      AND active = 1 AND day_of_week = 2 AND start_time = '10:00' AND end_time = '10:40'`).get(pilatesId).professional_id, studio.profId);
     assert.equal(db.prepare('SELECT amount FROM recurring_billing_plans WHERE id = ?').get(contract.id).amount, 650);
     const danceTerms = db.prepare('SELECT custom_price, custom_duration FROM professional_services WHERE service_id = ? AND professional_id = ?').get(danceId, studio.profId);
     assert.equal(danceTerms.custom_price, 93);

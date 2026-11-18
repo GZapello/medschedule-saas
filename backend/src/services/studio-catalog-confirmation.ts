@@ -3,9 +3,10 @@ import { Request } from 'express';
 import { db } from '../config/database';
 import { ServiceController, ServiceSaveResponse } from '../controllers/service.controller';
 import { getTenantEstablishmentProfile, PLAN_DURATION_MONTHS, resolveServiceDomain } from '../utils/establishment-context';
-import { isWindowCoveredByAnyProfessional, parseClockMinutes } from '../utils/service-availability';
+import { checkProfessionalScheduleCoverage, parseClockMinutes, WEEKDAY_NAMES_PT } from '../utils/service-availability';
 import { getPaymentPeriodicityCycleMonths, normalizeCommercialPriceOptions, normalizeStudioPriceAdjustments, normalizeStudioServiceType } from '../utils/studio-access-and-commercial';
 import { PackageService } from './package.service';
+import { minutesToHHMM, todayBrazilYmd } from './class-schedule.service';
 import { catalogError } from './studio-catalog-files';
 import { nameKey, priceConditionKey } from './studio-catalog-proposal';
 import type { ProposedPrice, ProposedService, StudioProposal } from '../shared/studio-catalog-contract';
@@ -139,27 +140,40 @@ function mergeCommercialOptions(existing: CatalogService, additions: ReturnType<
 }
 
 function scheduleInput(row: ProposedService, type: string, primary: string, capacity: number | null,
-  duration: number, tenantId: string, existing?: CatalogService) {
+  duration: number, tenantId: string, professionals: { id: string; name: string }[], existing?: CatalogService) {
   if (!row.schedules.length) return {};
   if (type !== 'group' && type !== 'individual') throw catalogError('Serviços sem agendamento não podem receber horários de aula.');
   const known = existing && type === 'group'
-    ? db.prepare('SELECT day_of_week, start_time, end_time, professional_id FROM class_schedules WHERE tenant_id = ? AND service_id = ? AND active = 1 AND (effective_end_date IS NULL OR effective_end_date >= date(\'now\'))')
-      .all(tenantId, existing.id) : [];
+    ? db.prepare('SELECT day_of_week, start_time, end_time, professional_id FROM class_schedules WHERE tenant_id = ? AND service_id = ? AND active = 1 AND (effective_end_date IS NULL OR effective_end_date >= ?)')
+      .all(tenantId, existing.id, todayBrazilYmd()) : [];
   const windows = existing && type === 'individual' && existing.availability_mode === 'custom_windows'
     ? db.prepare('SELECT day_of_week, start_time, end_time, professional_id FROM service_availability_windows WHERE tenant_id = ? AND service_id = ? AND active = 1')
       .all(tenantId, existing.id).map(w => ({ dayOfWeek: w.day_of_week, startTime: w.start_time, endTime: w.end_time, professionalId: w.professional_id })) : [];
+  const linked: { professional_id: string; custom_duration: number | null }[] = existing && type === 'individual' ? db.prepare(
+    'SELECT professional_id, custom_duration FROM professional_services WHERE service_id = ?'
+  ).all(existing.id) : [];
   const schedules = new Map<string, { dayOfWeek: number; startTime: string; endTime: string; professionalId: string; capacity: number | null }>();
   for (const item of row.schedules) {
     const start = parseClockMinutes(item.startTime);
     const end = parseClockMinutes(item.endTime);
-    if (item.dayOfWeek === null || start === null || end === null || end - start < duration) {
-      throw catalogError('Confirme o dia e a faixa de cada horário. A faixa precisa comportar a duração da aula.');
+    if (item.dayOfWeek === null || start === null || end === null || end <= start) {
+      throw catalogError('Confirme o dia, o início e o término de cada horário. O término deve ser posterior ao início.');
     }
-    const professionalId = item.professionalId || (!item.professionalName ? primary : '');
-    if (!professionalId || !isWindowCoveredByAnyProfessional(tenantId, [professionalId], {
-      dayOfWeek: item.dayOfWeek, startMin: start, endMin: end
-    }) || !db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ? AND active = 1').get(professionalId, tenantId)) {
-      throw catalogError('Selecione um profissional ativo cuja escala cubra todo o horário proposto.');
+    const professionalId = item.professionalId || primary;
+    const professional = professionals.find(p => p.id === professionalId);
+    const period = `${WEEKDAY_NAMES_PT[item.dayOfWeek]} (${item.startTime}–${item.endTime})`;
+    if (!professional) throw catalogError(`${period}: selecione um profissional ativo deste estabelecimento para o horário.`);
+    const coverage = checkProfessionalScheduleCoverage(tenantId, professionalId, item.dayOfWeek, start, end);
+    if (!coverage.ok) {
+      const ranges = coverage.availableSegments.map(s => `${minutesToHHMM(s.start)}–${minutesToHHMM(s.end)}`);
+      const detail = ranges.length ? `Faixas disponíveis: ${ranges.join(', ')}.` : 'Nenhuma faixa disponível neste dia.';
+      throw catalogError(`${period}: a escala de ${professional.name} não cobre a aula. ${detail}`);
+    }
+    if (type === 'individual') {
+      const effectiveDuration = linked.find(p => p.professional_id === professionalId)?.custom_duration ?? duration;
+      if (end - start < effectiveDuration) {
+        throw catalogError(`${period}: a faixa de ${professional.name} precisa comportar a aula de ${effectiveDuration} minutos.`);
+      }
     }
     const entry = { dayOfWeek: item.dayOfWeek, startTime: item.startTime, endTime: item.endTime, professionalId, capacity: item.capacity ?? capacity };
     const key = [entry.dayOfWeek, entry.startTime, entry.endTime, entry.professionalId].join('|');
@@ -172,10 +186,9 @@ function scheduleInput(row: ProposedService, type: string, primary: string, capa
   const rows = [...schedules.values()];
   if (type === 'group') return { classSchedules: rows };
   const all = [...new Map([...windows, ...rows].map(w => [[w.dayOfWeek, w.startTime, w.endTime, w.professionalId].join('|'), w])).values()];
-  const linked = existing ? db.prepare('SELECT professional_id FROM professional_services WHERE service_id = ?').all(existing.id).map(r => String(r.professional_id)) : [];
   return {
     availabilityMode: 'custom_windows', availabilityWindows: all,
-    linkedProfessionalIds: [...new Set([...linked, ...rows.map(w => w.professionalId)].filter(Boolean))]
+    linkedProfessionalIds: [...new Set([...linked.map(p => p.professional_id), ...rows.map(w => w.professionalId)])]
   };
 }
 
@@ -248,9 +261,12 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
       const capacity = current ? current.default_capacity : row.type === 'duo' ? 2 : row.capacity;
       const duration = current ? current.duration_minutes : row.durationMinutes;
       const professional = current ? current.professional_id : row.professionalId;
+      if (isCreate && scheduled && !catalog.professionals.some(p => p.id === professional)) {
+        throw catalogError('Selecione um profissional responsável ativo deste estabelecimento.');
+      }
       if (isCreate && (!row.type || (scheduled && (!duration || !row.modality ||
-        !catalog.professionals.some(p => p.id === professional) || (type === 'group' && !capacity))))) {
-        throw catalogError('Confirme o tipo e, para serviços agendáveis, o profissional, a modalidade, a duração e as vagas da turma.');
+        (type === 'group' && !capacity))))) {
+        throw catalogError('Confirme o tipo e, para serviços agendáveis, a modalidade, a duração e as vagas da turma.');
       }
       if (isCreate && row.type === 'access_limited' && ((!row.weeklyLimit && !row.monthlyLimit) || (row.weeklyLimit || 0) > 50)) {
         throw catalogError('Informe o limite semanal (até 50) ou mensal do acesso.');
@@ -291,7 +307,7 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
         body.pricingAdjustments = previous;
       }
       if (isCreate || row.apply.includes('schedules')) {
-        Object.assign(body, scheduleInput(row, type, professional || '', capacity, duration || 0, tenantId, current));
+        Object.assign(body, scheduleInput(row, type, professional || '', capacity, duration || 0, tenantId, catalog.professionals, current));
       }
       const id = saveService(req, body, current?.id);
       references.set(row.key, id);

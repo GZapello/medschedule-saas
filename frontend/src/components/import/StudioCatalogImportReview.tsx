@@ -6,7 +6,7 @@ import {
   PriceFields, SelectField, TextField, types
 } from './StudioCatalogImportFields';
 
-type CatalogRecord = { id: string; name: string; active: boolean; type?: string; capacity?: number | null };
+type CatalogRecord = { id: string; name: string; active: boolean; type?: string; capacity?: number | null; professionalId?: string | null };
 export interface ImportSource { id: number; fileName: string; copies: number }
 export interface ImportReceipt {
   services: { key: string; id: string; name: string; action: string }[];
@@ -68,6 +68,8 @@ function ReviewCard({ name, row, matches, files, children }: {
 function ServiceEditor({ row, draft, onChange }: { row: ProposedService; draft: ImportDraft; onChange: (patch: Partial<ProposedService>) => void }) {
   const scheduled = ['individual', 'duo', 'group'].includes(row.type || '');
   const profOptions = draft.catalog.professionals.map(p => [p.id, p.name] as const);
+  const responsibleId = row.action === 'update' ? draft.catalog.services.find(s => s.id === row.existingId)?.professionalId : row.professionalId;
+  const responsible = draft.catalog.professionals.find(p => p.id === responsibleId);
   const matches = draft.matches.services[row.key] || [];
   const linked = draft.catalog.services.filter(s => s.active).map(s => [s.id, s.name] as const);
   const useExisting = row.action === 'link' || row.action === 'update';
@@ -123,7 +125,7 @@ function ServiceEditor({ row, draft, onChange }: { row: ProposedService; draft: 
               <TextField label="Início" type="time" value={slot.startTime} onChange={startTime => change({ startTime })} />
               <TextField label="Término" type="time" value={slot.endTime} onChange={endTime => change({ endTime })} />
               <SelectField label="Profissional do horário" options={profOptions} value={slot.professionalId}
-                placeholder={slot.professionalName ? 'Selecione' : 'Usar responsável'}
+                placeholder={responsible ? `Usar responsável (${responsible.name})` : 'Usar responsável'}
                 onChange={professionalId => change({ professionalId: professionalId || '' })} />
               {(row.type === 'group' || row.type === 'duo' || row.action === 'update') &&
                 <NumberField label="Vagas neste horário" value={slot.capacity} max={500} onChange={capacity => change({ capacity })} />}

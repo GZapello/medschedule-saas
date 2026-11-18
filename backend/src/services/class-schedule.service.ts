@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
 import { ConcreteModality, resolveConcreteModality } from '../utils/modality-resolver';
+import { checkProfessionalScheduleCoverage } from '../utils/service-availability';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import {
   InstructorParticipationService,
@@ -180,48 +181,6 @@ function checkClinicBusinessHours(
     return { ok: true };
   }
   return { ok: true };
-}
-
-function checkInstructorGeneralSchedule(
-  tenantId: string,
-  professionalId: string,
-  dayOfWeek: number,
-  startMin: number,
-  endMin: number
-): { ok: boolean; reason?: string } {
-  const shifts = db.prepare(`
-    SELECT start_time, end_time, break_start, break_end
-    FROM schedules
-    WHERE tenant_id = ? AND professional_id = ? AND day_of_week = ? AND is_active = 1
-    ORDER BY start_time ASC
-  `).all(tenantId, professionalId, dayOfWeek) as Array<{
-    start_time: string;
-    end_time: string;
-    break_start: string | null;
-    break_end: string | null;
-  }>;
-
-  if (!shifts || shifts.length === 0) {
-    return { ok: false, reason: 'O instrutor não possui expediente ativo neste dia da semana.' };
-  }
-
-  for (const s of shifts) {
-    const sStart = parseHHMMToMinutes(s.start_time);
-    const sEnd = parseHHMMToMinutes(s.end_time);
-    if (sStart < 0 || sEnd <= sStart) continue;
-    if (startMin >= sStart && endMin <= sEnd) {
-      if (s.break_start && s.break_end) {
-        const bStart = parseHHMMToMinutes(s.break_start);
-        const bEnd = parseHHMMToMinutes(s.break_end);
-        if (bStart >= 0 && bEnd > bStart && startMin < bEnd && endMin > bStart) {
-          continue;
-        }
-      }
-      return { ok: true };
-    }
-  }
-
-  return { ok: false, reason: 'Horário da aula está fora da disponibilidade do instrutor.' };
 }
 
 export function buildWeeklyScheduleSummary(schedules: ClassScheduleRecord[]): Array<{
@@ -460,7 +419,7 @@ export class ClassScheduleService {
       const startMin = parseHHMMToMinutes(s.start_time);
       const endMin = parseHHMMToMinutes(s.end_time);
       if (startMin >= 0 && endMin > startMin) {
-        const instrCheck = checkInstructorGeneralSchedule(tenantId, s.professional_id, Number(s.day_of_week), startMin, endMin);
+        const instrCheck = checkProfessionalScheduleCoverage(tenantId, s.professional_id, Number(s.day_of_week), startMin, endMin);
         if (!instrCheck.ok) {
           reasons.push(`${dayLabel} ${timeRange}: fora da escala geral de atendimento de ${profName}.`);
         }
@@ -707,7 +666,7 @@ export class ClassScheduleService {
           effectiveEndDate: effEnd
         });
 
-        const schedCheck = checkInstructorGeneralSchedule(tenantId, profId, dow, startMin, endMin);
+        const schedCheck = checkProfessionalScheduleCoverage(tenantId, profId, dow, startMin, endMin);
         if (!schedCheck.ok) {
           const dayLabel = WEEKDAY_SINGULAR_LABELS[dow] || `Dia ${dow}`;
           warnings.push(`${dayLabel} (${startTime}–${endTime}): a escala geral de ${prof.name} ainda não cobre este horário.`);
@@ -869,7 +828,7 @@ export class ClassScheduleService {
           effectiveEndDate: nextEffEnd,
           excludeScheduleId: scheduleId
         });
-        const schedCheck = checkInstructorGeneralSchedule(tenantId, nextProfId, nextDow, startMin, endMin);
+        const schedCheck = checkProfessionalScheduleCoverage(tenantId, nextProfId, nextDow, startMin, endMin);
         if (!schedCheck.ok) {
           const dayLabel = WEEKDAY_SINGULAR_LABELS[nextDow] || `Dia ${nextDow}`;
           warnings.push(`${dayLabel} (${nextStart}–${nextEnd}): a escala geral de ${prof.name} ainda não cobre este horário.`);
@@ -1122,7 +1081,7 @@ export class ClassScheduleService {
     }
 
     // Disponibilidade geral do instrutor como restrição adicional
-    const instrCheck = checkInstructorGeneralSchedule(tenantId, schedule.professional_id, dow, startMin, endMin);
+    const instrCheck = checkProfessionalScheduleCoverage(tenantId, schedule.professional_id, dow, startMin, endMin);
     if (!instrCheck.ok) {
       return {
         eligibleForDate: false,

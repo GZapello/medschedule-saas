@@ -22,7 +22,7 @@ export interface ServiceAvailabilityDiagnostics {
   incompatibleWindowIds: string[];
 }
 
-const WEEKDAY_NAMES_PT = [
+export const WEEKDAY_NAMES_PT = [
   'Domingo',
   'Segunda-feira',
   'Terça-feira',
@@ -132,20 +132,26 @@ export function getProfessionalScheduleSegmentsForDay(
   return mergeAdjacentSegments(segments);
 }
 
+export function checkProfessionalScheduleCoverage(
+  tenantId: string, professionalId: string, dayOfWeek: number, startMin: number, endMin: number
+): { ok: true } | { ok: false; reason: string; availableSegments: TimeSegment[] } {
+  const segments = getProfessionalScheduleSegmentsForDay(tenantId, professionalId, dayOfWeek);
+  if (segments.some(segment => segment.start <= startMin && endMin <= segment.end)) return { ok: true };
+  return {
+    ok: false, availableSegments: segments,
+    reason: segments.length ? 'Horário da aula está fora da disponibilidade do instrutor.' : 'O instrutor não possui expediente ativo neste dia da semana.'
+  };
+}
+
 export function isWindowCoveredByAnyProfessional(
   tenantId: string,
   professionalIds: string[],
   window: { dayOfWeek: number; startMin: number; endMin: number }
 ): boolean {
   const cleanProfIds = Array.from(new Set(professionalIds.filter(Boolean)));
-  if (cleanProfIds.length === 0) return false;
-  for (const profId of cleanProfIds) {
-    const profSegs = getProfessionalScheduleSegmentsForDay(tenantId, profId, window.dayOfWeek);
-    if (profSegs.some(seg => window.startMin >= seg.start && window.endMin <= seg.end)) {
-      return true;
-    }
-  }
-  return false;
+  return cleanProfIds.some(id => checkProfessionalScheduleCoverage(
+    tenantId, id, window.dayOfWeek, window.startMin, window.endMin
+  ).ok);
 }
 
 export function normalizeAndValidateServiceAvailability(params: {

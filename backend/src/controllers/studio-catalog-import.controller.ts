@@ -29,7 +29,8 @@ function responseFor(tenantId: string, draft: Draft) {
   const proposal = JSON.parse(draft.proposal_json) as StudioProposal;
   const catalog = readStudioImportCatalog(tenantId);
   const services = catalog.services.map(s => ({
-    id: s.id, name: s.name, active: Boolean(s.active), type: s.studio_service_type, capacity: s.default_capacity
+    id: s.id, name: s.name, active: Boolean(s.active), type: s.studio_service_type, capacity: s.default_capacity,
+    professionalId: s.professional_id
   }));
   const packages = catalog.packages.map(p => ({ ...p, active: Boolean(p.active) }));
   return {

@@ -41,14 +41,18 @@ async function main() {
     for (const width of [390, 1440]) {
       const page = await browser.newPage({ viewport: { width, height: 960 } });
       const sources = [{ id: 1, fileName: 'precos-pilates.csv', copies: 1 }];
-      const catalog = { services: [], packages: [], professionals: [{ id: 'p-ana', name: 'Ana Ribeiro' }] };
+      const catalog = { services: [], packages: [], professionals: [
+        { id: 'p-ana', name: 'Ana Ribeiro' }, { id: 'p-bia', name: 'Bia' }
+      ] };
       const proposal = normalizeProposal({
         services: [{
           name: 'Pilates Individual', type: 'individual', activity: 'Pilates', modality: 'presential',
           durationMinutes: 50, professionalNames: ['Ana Ribeiro'], sources: [1], prices: [{
             label: '2 aulas por semana', amountCents: 48000, unit: null, duration: '1_month',
             paymentPeriod: 'monthly', frequencyType: 'weekly', frequencyCount: 2, evidence: '2x por semana — R$ 480', sources: [1]
-          }]
+          }], schedules: [3, 5].map(dayOfWeek => ({
+            dayOfWeek, startTime: '19:00', endTime: '20:00', professionalName: 'Profa. Ana'
+          }))
         }], packages: [{ name: 'Pacote de Pilates', sources: [1], items: [{ serviceName: 'Pilates Individual' }] }]
       }, 1, true);
       let draft;
@@ -72,6 +76,7 @@ async function main() {
           const row = payload.proposal.services[0];
           assert.equal(row.prices[0].unit, 'per_month');
           assert.equal(row.professionalId, 'p-ana');
+          assert.deepEqual(row.schedules.map(s => s.professionalId), ['', 'p-bia']);
           assert.equal(row.reviewed, true);
           const component = payload.proposal.packages[0].items[0];
           assert.deepEqual([component.includedCredits, component.weeklyFrequency, component.monthlyLimit], [12, 2, 8]);
@@ -105,6 +110,10 @@ async function main() {
       assert.ok(await page.getByRole('button', { name: 'Confirmar importação', exact: true }).isDisabled());
       await page.getByLabel('Ação para este serviço').selectOption('create');
       await page.getByLabel('Profissional responsável').selectOption('p-ana');
+      const instructors = page.getByLabel('Profissional do horário');
+      await instructors.first().selectOption('p-bia');
+      await instructors.first().selectOption({ label: 'Usar responsável (Ana Ribeiro)' });
+      await instructors.nth(1).selectOption('p-bia');
       await page.getByLabel('O que o valor representa').selectOption('per_month');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       if (width === 390) await page.screenshot({ path: path.join(output, '02-revisao-mobile.png'), fullPage: true });
