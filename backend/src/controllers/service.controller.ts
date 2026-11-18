@@ -94,6 +94,10 @@ function getLinkedProfessionalsMap(
          SELECT 1 FROM professional_services ps
          WHERE ps.service_id = s.id AND ps.professional_id = p.id
        )
+       OR EXISTS (
+         SELECT 1 FROM class_schedules cs
+         WHERE cs.service_id = s.id AND cs.tenant_id = s.tenant_id AND cs.professional_id = p.id AND cs.active = 1
+       )
      )
     LEFT JOIN professions pr ON pr.id = p.profession_id
     WHERE s.tenant_id = ?

@@ -872,39 +872,80 @@ export function StudioCatalogImportReview({ draft, onChange }: { draft: ImportDr
     });
   };
 
+  const isServiceRowReady = (row: ProposedService): boolean => {
+    const existing = row.action === 'update' || row.action === 'link'
+      ? draft.catalog.services.find(s => s.id === row.existingId)
+      : undefined;
+    const hasLiveSlotIssue =
+      !row.deferSchedules &&
+      row.schedules.some(s => !evaluateSlotLive(s, row, draft.catalog.services, draft.catalog.professionals).ok);
+    const hasPriceIssue = row.prices.some(p => !p.amountCents || !p.unit || Boolean(p.ambiguousReason));
+    const effType = existing?.type || row.type || '';
+    const needsOpFields = ['individual', 'duo', 'group'].includes(row.type || effType);
+    const hasAllSlotProfs = row.schedules.length > 0 && row.schedules.every(s => Boolean(s.professionalId));
+    const hasEffProf = Boolean(row.professionalId || existing?.professionalId || hasAllSlotProfs);
+    const hasEffModality = Boolean(row.modality || existing);
+    const hasEffDuration = Boolean(row.durationMinutes || existing);
+    const hasEffCapacity = (row.type || effType) !== 'group' || Boolean(row.capacity || existing?.capacity);
+    const hasOpIssue = needsOpFields && (!hasEffModality || !hasEffDuration || !hasEffProf || !hasEffCapacity);
+    return Boolean(row.name && (row.type || existing) && row.issues.length === 0 && !hasLiveSlotIssue && !hasPriceIssue && !hasOpIssue);
+  };
+
+  const isPackageRowReady = (pkg: ProposedPackage): boolean => {
+    const existing = pkg.action === 'link'
+      ? draft.catalog.packages.find(p => p.id === pkg.existingId)
+      : undefined;
+    return Boolean(
+      pkg.name &&
+      (existing || (pkg.price?.amountCents && pkg.price.unit && pkg.price.duration && pkg.price.paymentPeriod)) &&
+      pkg.items.every(i => i.serviceRef) &&
+      pkg.issues.length === 0
+    );
+  };
+
   const approveReadyBatch = () => {
     onChange({
+      ...proposal,
       services: proposal.services.map(row => {
-        const hasLiveSlotIssue =
-          !row.deferSchedules &&
-          row.schedules.some(s => !evaluateSlotLive(s, row, draft.catalog.services, draft.catalog.professionals).ok);
-        const hasPriceIssue = row.prices.some(p => !p.amountCents || !p.unit || Boolean(p.ambiguousReason));
-        const hasOpIssue = ['individual', 'duo', 'group'].includes(row.type || '') &&
-          (!row.modality || !row.durationMinutes || (!row.professionalId && !row.schedules.every(s => Boolean(s.professionalId))) || (row.type === 'group' && !row.capacity));
-        if (!row.name || !row.type || row.issues.length > 0 || hasLiveSlotIssue || hasPriceIssue || hasOpIssue) {
-          return row;
-        }
+        if (!isServiceRowReady(row)) return row;
         return { ...row, action: row.action === 'ignore' ? 'create' : row.action, reviewed: true };
       }),
       packages: proposal.packages.map(pkg => {
-        const ready = Boolean(pkg.name && pkg.price?.amountCents && pkg.price.unit && pkg.price.duration && pkg.price.paymentPeriod && pkg.items.every(i => i.serviceRef) && pkg.issues.length === 0);
-        return ready ? { ...pkg, action: pkg.action === 'ignore' ? 'create' : pkg.action, reviewed: true } : pkg;
+        if (!isPackageRowReady(pkg)) return pkg;
+        return { ...pkg, action: pkg.action === 'ignore' ? 'create' : pkg.action, reviewed: true };
       })
     });
   };
 
   const setPublicAllSelected = (allowPublicBooking: boolean) => {
     onChange({
+      ...proposal,
       services: proposal.services.map(s => (s.action !== 'ignore' ? { ...s, allowPublicBooking } : s)),
       packages: proposal.packages.map(p => (p.action !== 'ignore' ? { ...p, allowPublicBooking } : p))
     });
   };
 
-  const sum = diagnostics?.summary;
+  const diagSummary = diagnostics?.summary;
+  const liveReadyCount =
+    proposal.services.filter(isServiceRowReady).length +
+    proposal.packages.filter(isPackageRowReady).length;
+  const totalItemsCount = proposal.services.length + proposal.packages.length;
+  const livePendingCount = Math.max(0, totalItemsCount - liveReadyCount);
+  const sum = {
+    servicesTotal: proposal.services.length,
+    priceOptionsTotal: proposal.services.reduce((acc, r) => acc + r.prices.length, 0),
+    schedulesTotal: proposal.services.reduce((acc, r) => acc + (r.deferSchedules ? 0 : r.schedules.length), 0),
+    packagesTotal: proposal.packages.length,
+    readyTotal: liveReadyCount,
+    pendingTotal: livePendingCount,
+    duplicatesFound: diagSummary?.duplicatesFound ??
+      (proposal.services.filter(s => (draft.matches.services[s.key]?.length || 0) > 0).length +
+        proposal.packages.filter(p => (draft.matches.packages[p.key]?.length || 0) > 0).length)
+  };
 
   return <div className="space-y-4">
     {/* Painel Resumo da Análise */}
-    {sum && (
+    {totalItemsCount > 0 && (
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-center">
         <div className="rounded-xl bg-white p-2 border border-slate-100">
           <div className="text-base font-extrabold text-slate-900">{sum.servicesTotal}</div>
@@ -923,11 +964,11 @@ export function StudioCatalogImportReview({ draft, onChange }: { draft: ImportDr
           <div className="text-[11px] font-semibold text-slate-500">Pacotes</div>
         </div>
         <div className="rounded-xl bg-emerald-50 p-2 border border-emerald-100">
-          <div className="text-base font-extrabold text-emerald-700">{sum.servicesReady + sum.packagesReady}</div>
+          <div className="text-base font-extrabold text-emerald-700">{sum.readyTotal}</div>
           <div className="text-[11px] font-semibold text-emerald-800">Sem pendências</div>
         </div>
         <div className="rounded-xl bg-amber-50 p-2 border border-amber-100">
-          <div className="text-base font-extrabold text-amber-700">{sum.servicesPending + sum.packagesPending}</div>
+          <div className="text-base font-extrabold text-amber-700">{sum.pendingTotal}</div>
           <div className="text-[11px] font-semibold text-amber-900">Para revisar</div>
         </div>
         <div className="rounded-xl bg-slate-100 p-2 border border-slate-200">

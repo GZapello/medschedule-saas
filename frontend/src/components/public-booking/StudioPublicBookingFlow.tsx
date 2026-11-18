@@ -119,6 +119,8 @@ function formatCommercialOptionSummary(opt: any): {
   paymentLabel: string;
   durationLabel: string;
   cycleAmount: number;
+  unitSuffix: string;
+  secondaryDetail: string;
 } {
   const accessType = opt?.accessType || 'unlimited';
   let frequencyLabel = 'Acesso livre';
@@ -135,15 +137,26 @@ function formatCommercialOptionSummary(opt: any): {
   }
   const period = String(opt?.paymentPeriodicity || 'monthly');
   const installments = Number(opt?.installmentsCount || 1);
+  const maxInstallments = Number(opt?.maxInstallments || 0);
   const paymentLabel =
     period === 'installments' && installments > 1
       ? `Parcelado em ${installments}x`
+      : maxInstallments > 1
+      ? `${PERIODICITY_LABELS[period] || 'Mensal'} (até ${maxInstallments}x)`
       : PERIODICITY_LABELS[period] || 'Mensal';
   const durationLabel = PLAN_DURATION_LABELS[opt?.contractDurationCode as PlanDurationCode] || opt?.contractDurationCode || 'Mensal';
   const cycleAmount = Number(
     opt?.priceReais ?? (Number(opt?.amountCents ?? opt?.priceCents ?? 0) / 100)
   );
-  return { frequencyLabel, paymentLabel, durationLabel, cycleAmount };
+  const unitSuffix = opt?.commercialUnit === 'per_participant' ? ' / pessoa' : '';
+  const equivCents = Number(opt?.equivalentMonthlyCents || 0);
+  const secondaryDetail =
+    equivCents > 0
+      ? `equiv. R$ ${(equivCents / 100).toFixed(2).replace('.', ',')}/mês`
+      : opt?.notes
+      ? String(opt.notes)
+      : '';
+  return { frequencyLabel, paymentLabel, durationLabel, cycleAmount, unitSuffix, secondaryDetail };
 }
 
 export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = ({
@@ -885,7 +898,13 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       setError('Esta turma está lotada no momento. Escolha outro dia ou horário.');
       return;
     }
-    const srv = services.find(s => s.id === activePkgServiceId);
+    const activePkgItem = (selectedPackage?.items || []).find((i: any) => i.service_id === activePkgServiceId);
+    const matchedSrv = services.find(s => s.id === activePkgServiceId);
+    const srv = matchedSrv || (activePkgItem ? {
+      id: activePkgItem.service_id,
+      name: activePkgItem.service_name,
+      allow_recurrence: activePkgItem.allow_recurrence ?? 1
+    } : null);
     if (!srv || !selectedPackage) return;
 
     const slotAllowed: ConcreteModality[] =
@@ -1649,10 +1668,13 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       >
                         <div className="flex items-center justify-between gap-2 font-bold text-slate-900">
                           <span>{opt.label || `${summary.durationLabel} • ${summary.frequencyLabel}`}</span>
-                          <span className="text-emerald-700">{formatMoney(summary.cycleAmount)}</span>
+                          <span className="text-emerald-700">
+                            {formatMoney(summary.cycleAmount)}{summary.unitSuffix}
+                          </span>
                         </div>
                         <div className="text-[11px] text-slate-600">
                           {summary.durationLabel} • {summary.frequencyLabel} • {summary.paymentLabel}
+                          {summary.secondaryDetail ? ` • ${summary.secondaryDetail}` : ''}
                         </div>
                       </button>
                     );
@@ -2667,7 +2689,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                         {it.roomName ? ` • ${it.roomName}` : ''}
                       </span>
                       {it.recurrenceCount > 1 && (() => {
-                        const srvItem = services.find(s => s.id === it.serviceId);
+                        const pkgItemObj = (selectedPackage.items || []).find((pi: any) => pi.service_id === it.serviceId);
+                        const srvItem = services.find(s => s.id === it.serviceId) || pkgItemObj;
                         const pkgItemRec = parseServiceRecurrenceConfig(srvItem);
                         const pkgFreq = pkgItemRec.defaultFrequency || pkgItemRec.allowedFrequencies[0] || 'weekly';
                         const pkgCustom =
@@ -2738,7 +2761,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 {pkgSelectedItems.length > 0 ? (
                   <ul className="list-disc pl-4 space-y-1 text-slate-700">
                     {pkgSelectedItems.map(it => {
-                      const srvItem = services.find(s => s.id === it.serviceId);
+                      const pkgItemObj = (selectedPackage.items || []).find((pi: any) => pi.service_id === it.serviceId);
+                      const srvItem = services.find(s => s.id === it.serviceId) || pkgItemObj;
                       const pkgItemRec = parseServiceRecurrenceConfig(srvItem);
                       const pkgFreq = pkgItemRec.defaultFrequency || pkgItemRec.allowedFrequencies[0] || 'weekly';
                       const pkgCustom =

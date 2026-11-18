@@ -40,6 +40,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'view_financial', label: 'Visualizar movimentações financeiras' },
   { id: 'issue_receipt', label: 'Emitir recibos oficiais' },
   { id: 'view_receipts', label: 'Visualizar recibos emitidos' },
+  { id: 'view_enrollments', label: 'Consultar matrículas, planos e vigências (sem financeiro)' },
+  { id: 'manage_contracts', label: 'Gerenciar matrículas, contratos e renovações' },
   { id: 'manage_professionals', label: 'Gerenciar profissionais' },
   { id: 'manage_staff', label: 'Gerenciar equipe e funcionários' },
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas' },
@@ -52,13 +54,13 @@ const PERMISSION_PRESETS = [
     id: 'receptionist',
     label: 'Recepcionista',
     desc: 'Agenda, pacientes, pagamentos e recibos',
-    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'view_financial', 'issue_receipt', 'view_receipts']
+    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'view_financial', 'issue_receipt', 'view_receipts', 'view_enrollments', 'manage_contracts']
   },
   {
     id: 'professional',
     label: 'Profissional de Saúde',
     desc: 'Agenda própria e gestão de pacientes',
-    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient']
+    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'view_enrollments']
   },
   {
     id: 'dentist',

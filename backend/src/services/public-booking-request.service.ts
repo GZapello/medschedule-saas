@@ -1444,14 +1444,30 @@ export class PublicBookingRequestService {
     // 2. Autorização por vínculo de usuário/estabelecimento/profissional
     const cleanRole = String(role || '').toLowerCase();
     const cuRow = db.prepare(`
-      SELECT is_manager, role, status, deactivated_at
+      SELECT is_manager, role, status, deactivated_at, permissions_json
       FROM clinic_users
       WHERE user_id = ? AND tenant_id = ?
       LIMIT 1
     `).get(userId, tenantId) as any;
+    let customPerms: string[] = [];
+    if (cuRow?.permissions_json) {
+      try {
+        const parsed = JSON.parse(cuRow.permissions_json);
+        if (Array.isArray(parsed)) customPerms = parsed;
+      } catch (_) {}
+    }
+    const isContractManagerForPlanOrPkg =
+      (requestRow.mode === 'access_plan' || requestRow.mode === 'package') &&
+      cuRow &&
+      (!cuRow.status || cuRow.status === 'active') &&
+      !cuRow.deactivated_at &&
+      (String(cuRow.role || '').toLowerCase() === 'receptionist' ||
+        customPerms.includes('manage_contracts') ||
+        customPerms.includes('manage_financial'));
     const isManager =
       (cleanRole === 'superadmin' && Boolean(isSandboxSession)) ||
       cleanRole === 'clinic_admin' ||
+      Boolean(isContractManagerForPlanOrPkg) ||
       (cuRow && (!cuRow.status || cuRow.status === 'active') && !cuRow.deactivated_at &&
         (cuRow.is_manager === 1 || String(cuRow.role || '').toLowerCase() === 'clinic_admin'));
 

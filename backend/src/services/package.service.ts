@@ -1,6 +1,7 @@
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { BillingCycleService, normalizePeriodicFrequency } from './billing-cycle.service';
+import { ClassScheduleService } from './class-schedule.service';
 import { PeriodicBillingFrequency, resolvePlanDurationEndDate } from '../utils/establishment-context';
 import { normalizeStudioAccessConfig, normalizeStudioServiceType } from '../utils/studio-access-and-commercial';
 
@@ -127,6 +128,12 @@ export class PackageService {
 
     if (packages.length === 0) return [];
 
+    const tenantMeta = db.prepare(`
+      SELECT COALESCE(establishment_profile, 'clinic') as establishment_profile,
+             COALESCE(public_booking_enabled, 0) as public_booking_enabled
+      FROM tenants WHERE id = ?
+    `).get(tenantId) as { establishment_profile?: string; public_booking_enabled?: number } | undefined;
+
     const itemStmt = db.prepare(`
       SELECT
         spi.*,
@@ -137,10 +144,18 @@ export class PackageService {
         s.modality,
         COALESCE(s.service_kind, 'individual') as service_kind,
         COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
-        COALESCE(s.requires_appointment, 1) as requires_appointment,
+        COALESCE(s.requires_appointment, 1) as service_requires_appointment,
+        COALESCE(s.allow_public_booking, 1) as service_allow_public_booking,
+        COALESCE(s.availability_mode, 'professional_schedule') as availability_mode,
         s.access_config_json,
         s.default_capacity,
         COALESCE(s.allow_recurrence, 1) as allow_recurrence,
+        s.allowed_recurrence_frequencies_json,
+        s.default_recurrence_frequency,
+        s.allowed_plan_durations_json,
+        s.default_plan_duration,
+        s.custom_recurrence_intervals_json,
+        s.default_recurrence_interval_json,
         s.modality_category,
         s.professional_id as default_professional_id,
         s.active as service_active
@@ -158,37 +173,193 @@ export class PackageService {
       JOIN services s ON s.id = ? AND s.tenant_id = ?
       LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = p.id
       WHERE p.tenant_id = ? AND p.active = 1
-        AND (s.professional_id = p.id OR ps.professional_id = p.id)
+        AND (
+          s.professional_id = p.id
+          OR ps.professional_id = p.id
+          OR EXISTS (
+            SELECT 1 FROM class_schedules cs
+            WHERE cs.service_id = s.id AND cs.tenant_id = s.tenant_id AND cs.professional_id = p.id AND cs.active = 1
+          )
+        )
       ORDER BY p.name ASC
     `);
 
+    const inactiveProfsForServiceStmt = db.prepare(`
+      SELECT DISTINCT p.id, p.name
+      FROM professionals p
+      JOIN services s ON s.id = ? AND s.tenant_id = ?
+      LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = p.id
+      WHERE p.tenant_id = ? AND p.active = 0
+        AND (
+          s.professional_id = p.id
+          OR ps.professional_id = p.id
+          OR EXISTS (
+            SELECT 1 FROM class_schedules cs
+            WHERE cs.service_id = s.id AND cs.tenant_id = s.tenant_id AND cs.professional_id = p.id AND cs.active = 1
+          )
+        )
+      ORDER BY p.name ASC
+    `);
+
+    const schedulesByService = ClassScheduleService.listByTenantGrouped(tenantId, {
+      includeInactive: true,
+      publicOnly: false
+    });
+    const profScheduleCounts = new Map<string, number>();
+    const schedCountRows = db.prepare(`
+      SELECT professional_id, COUNT(*) as c
+      FROM schedules
+      WHERE tenant_id = ? AND is_active = 1
+      GROUP BY professional_id
+    `).all(tenantId) as Array<{ professional_id: string; c: number }>;
+    for (const r of schedCountRows) {
+      profScheduleCounts.set(r.professional_id, Number(r.c || 0));
+    }
+
+    const customAvailCountMap = new Map<string, number>();
+    const customAvailRows = db.prepare(`
+      SELECT service_id, COUNT(*) as c
+      FROM service_availability_windows
+      WHERE tenant_id = ? AND active = 1
+      GROUP BY service_id
+    `).all(tenantId) as Array<{ service_id: string; c: number }>;
+    for (const r of customAvailRows) {
+      customAvailCountMap.set(r.service_id, Number(r.c || 0));
+    }
+
     return packages.map(pkg => {
       const rawItems = itemStmt.all(pkg.id, tenantId) as any[];
+      const itemDiagnostics: Array<{
+        serviceId: string;
+        serviceName: string;
+        itemType: 'scheduled_service' | 'facility_access' | 'deliverable';
+        requiresAppointment: boolean;
+        ready: boolean;
+        blockers: string[];
+        warnings: string[];
+      }> = [];
+
       const items = rawItems.map(item => {
         const allProfs = profsForServiceStmt.all(item.service_id, tenantId, tenantId) as any[];
-        const professionals = opts?.publicOnly
-          ? allProfs.filter(p => Number(p.public_booking_enabled ?? 1) === 1)
-          : allProfs;
+        const publicProfs = allProfs.filter(p => Number(p.public_booking_enabled ?? 1) === 1);
+        const professionals = opts?.publicOnly ? publicProfs : allProfs;
+
         const resolvedStudioType = normalizeStudioServiceType(item.studio_service_type, item.service_kind);
-        const resolvedItemType =
+        let resolvedItemType: 'scheduled_service' | 'facility_access' | 'deliverable' =
           item.item_type === 'facility_access' || item.item_type === 'deliverable'
             ? item.item_type
             : (resolvedStudioType === 'facility_access'
                 ? 'facility_access'
                 : (resolvedStudioType === 'non_scheduled' ? 'deliverable' : 'scheduled_service'));
+        if (
+          resolvedItemType === 'scheduled_service' &&
+          Number(item.service_requires_appointment ?? 1) === 0 &&
+          resolvedStudioType !== 'group'
+        ) {
+          resolvedItemType = 'facility_access';
+        }
+        const resolvedRequiresAppt = resolvedItemType === 'scheduled_service' ? 1 : 0;
         const resolvedAccessMode =
           resolvedItemType === 'facility_access'
             ? (item.access_mode === 'limited' ? 'limited' : (Number(item.included_credits || 0) > 0 || Number(item.weekly_frequency || 0) > 0 || Number(item.monthly_limit || 0) > 0 ? 'limited' : 'unlimited'))
             : null;
+
+        const isGroup = item.service_kind === 'group' && resolvedRequiresAppt === 1;
+        const groupDiag = isGroup
+          ? ClassScheduleService.diagnoseServiceSchedules(
+              tenantId,
+              item.service_id,
+              schedulesByService.get(item.service_id) || []
+            )
+          : null;
+
+        const itemBlockers: string[] = [];
+        const itemWarnings: string[] = [];
+        if (Number(item.service_active) !== 1) {
+          itemBlockers.push(`O serviço "${item.service_name}" está inativo. Reative-o no catálogo de Serviços ou remova-o deste pacote.`);
+        }
+        if (Number(item.service_allow_public_booking ?? 1) !== 1) {
+          itemBlockers.push(`O serviço "${item.service_name}" está com "Disponibilizar no agendamento público" desativado. Ative a publicação online no cadastro desse serviço.`);
+        }
+        if (resolvedRequiresAppt === 1) {
+          if (allProfs.length === 0) {
+            const inactiveProfs = inactiveProfsForServiceStmt.all(item.service_id, tenantId, tenantId) as Array<{ name: string }>;
+            if (inactiveProfs.length > 0) {
+              itemBlockers.push(
+                `O(s) instrutor(es) vinculado(s) a "${item.service_name}" (${inactiveProfs.map(p => p.name).join(', ')}) está(ão) inativo(s).`
+              );
+            } else {
+              itemBlockers.push(
+                `O serviço "${item.service_name}" não possui nenhum profissional/instrutor ativo vinculado. Edite o serviço para vincular ao menos um instrutor.`
+              );
+            }
+          } else if (publicProfs.length === 0) {
+            itemBlockers.push(
+              `O(s) instrutor(es) vinculado(s) a "${item.service_name}" (${allProfs.map(p => p.name).join(', ')}) está(ão) com o agendamento público desativado em Links de Agendamento.`
+            );
+          }
+
+          if (isGroup && groupDiag && !groupDiag.isPublicReady) {
+            itemBlockers.push(
+              groupDiag.blockers[0]
+                ? `"${item.service_name}": ${groupDiag.blockers[0]}`
+                : `A turma "${item.service_name}" ainda não possui horários publicados na grade semanal.`
+            );
+          } else if (!isGroup && publicProfs.length > 0) {
+            const hasSchedules = item.availability_mode === 'custom_windows'
+              ? (customAvailCountMap.get(item.service_id) || 0) > 0
+              : publicProfs.some(p => (profScheduleCounts.get(p.id) || 0) > 0);
+            if (!hasSchedules) {
+              itemWarnings.push(
+                `Os instrutores de "${item.service_name}" ainda não possuem horários configurados na agenda para os alunos escolherem datas online.`
+              );
+            }
+          }
+        }
+
+        itemDiagnostics.push({
+          serviceId: item.service_id,
+          serviceName: item.service_name,
+          itemType: resolvedItemType,
+          requiresAppointment: resolvedRequiresAppt === 1,
+          ready: itemBlockers.length === 0,
+          blockers: itemBlockers,
+          warnings: itemWarnings
+        });
+
         return {
           ...item,
           item_type: resolvedItemType,
           access_mode: resolvedAccessMode,
-          requires_appointment: resolvedItemType === 'scheduled_service' ? 1 : 0,
+          requires_appointment: resolvedRequiresAppt,
           is_mandatory: Number(item.is_mandatory ?? 1) === 0 ? 0 : 1,
-          professionals
+          professionals,
+          _groupSchedulePublishable: !isGroup || Boolean(groupDiag?.isPublicReady)
         };
       });
+
+      const blockers: string[] = [];
+      const warnings: string[] = [];
+      if (Number(tenantMeta?.public_booking_enabled ?? 0) !== 1) {
+        blockers.push('O link público de agendamento do estabelecimento está desativado em Links de Agendamento.');
+      }
+      if (Number(pkg.active) !== 1) {
+        blockers.push('Este pacote está inativo no catálogo.');
+      }
+      if (Number(pkg.allow_public_booking ?? 1) !== 1) {
+        blockers.push('A opção "Disponibilizar no agendamento público do Studio" está desmarcada neste pacote.');
+      }
+      if (items.length === 0) {
+        blockers.push('O pacote não possui nenhum serviço ou benefício vinculado.');
+      }
+      for (const diag of itemDiagnostics) {
+        for (const b of diag.blockers) {
+          if (!blockers.includes(b)) blockers.push(b);
+        }
+        for (const w of diag.warnings) {
+          if (!warnings.includes(w)) warnings.push(w);
+        }
+      }
 
       const computedTotalCredits = pkg.credit_mode === 'shared_pool'
         ? Number(pkg.total_credits || 0)
@@ -199,15 +370,28 @@ export class PackageService {
       return {
         ...pkg,
         total_credits: computedTotalCredits,
-        items
+        items,
+        public_booking_diagnostics: {
+          isPublicReady: blockers.length === 0,
+          blockers,
+          warnings,
+          items: itemDiagnostics
+        }
       };
     }).filter(pkg => {
       if (!opts?.publicOnly) return true;
       return pkg.items.length > 0 && pkg.items.every((it: any) =>
         Number(it.service_active) === 1 &&
-        (Number(it.requires_appointment) === 0 || it.professionals.length > 0)
+        Number(it.service_allow_public_booking ?? 1) === 1 &&
+        (
+          Number(it.requires_appointment) === 0 ||
+          (it.professionals.length > 0 && (it.service_kind !== 'group' || Boolean(it._groupSchedulePublishable)))
+        )
       );
-    });
+    }).map(pkg => ({
+      ...pkg,
+      items: pkg.items.map(({ _groupSchedulePublishable, ...cleanItem }: any) => cleanItem)
+    }));
   }
 
   static createPackage(tenantId: string, input: CreatePackageInput, createdBy: string): any {

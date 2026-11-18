@@ -35,7 +35,7 @@ export const WEEKDAY_NAMES_PT = [
 export function parseClockMinutes(clock: unknown): number | null {
   if (typeof clock !== 'string') return null;
   const clean = clock.trim();
-  const m = clean.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  const m = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (!m) return null;
   const hh = Number(m[1]);
   const mm = Number(m[2]);
@@ -110,7 +110,7 @@ export function getProfessionalScheduleSegmentsForDay(
     .prepare(`
       SELECT start_time, end_time, break_start, break_end
       FROM schedules
-      WHERE tenant_id = ? AND professional_id = ? AND day_of_week = ? AND is_active = 1
+      WHERE tenant_id = ? AND professional_id = ? AND day_of_week = ? AND (is_active = 1 OR is_active = 'true')
       ORDER BY start_time ASC
     `)
     .all(tenantId, professionalId, dayOfWeek) as Array<{

@@ -70,9 +70,18 @@ const clock = (v: unknown) => {
   if (typeof v !== 'string') return '';
   const clean = v.trim();
   if (/^([01]\d|2[0-3]):[0-5]\d$/.test(clean)) return clean;
-  // Normaliza "19:00:00" ou "19h" ou "19h30" com segurança
-  const hms = clean.match(/^([01]\d|2[0-3]):([0-5]\d):[0-5]\d$/);
-  if (hms) return `${hms[1]}:${hms[2]}`;
+  // Normaliza "9:00", "19:00:00", "19h", "19h30", "7h" com segurança
+  const hms = clean.match(/^(\d{1,2}):([0-5]\d)(?::[0-5]\d)?$/);
+  if (hms) {
+    const hh = Number(hms[1]);
+    if (hh >= 0 && hh <= 23) return `${String(hh).padStart(2, '0')}:${hms[2]}`;
+  }
+  const brHour = clean.match(/^(\d{1,2})\s*h(?:\s*([0-5]\d))?$/i);
+  if (brHour) {
+    const hh = Number(brHour[1]);
+    const mm = brHour[2] || '00';
+    if (hh >= 0 && hh <= 23) return `${String(hh).padStart(2, '0')}:${mm}`;
+  }
   return '';
 };
 
@@ -191,15 +200,22 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     }))
   }));
 
-  const packages = list(raw.packages, 20, (row, i) => ({
-    ...identity(row), ...review(row), key: 'p' + (i + 1), price: row.price ? price(object(row.price)) : null,
+  const packages = list(raw.packages, 20, (row, i) => {
+    const rawPrice = row.price;
+    const normalizedPkgPrice =
+      typeof rawPrice === 'number' && Number.isFinite(rawPrice) && rawPrice > 0
+        ? price({ amountCents: Math.round(rawPrice * 100), unit: 'package_total', paymentPeriodicity: 'monthly', label: 'Pacote' })
+        : (rawPrice ? price(object(rawPrice)) : null);
+    return {
+      ...identity(row), ...review(row), key: 'p' + (i + 1), price: normalizedPkgPrice,
     action: (extracted ? null : choice(row.action, ['create', 'link', 'ignore'] as const)) || 'ignore',
-    items: list(row.items, 20, item => ({
-      serviceName: str(item.serviceName), serviceRef: extracted ? '' : str(item.serviceRef, 110),
-      includedCredits: integer(item.includedCredits, 1, 500), weeklyFrequency: integer(item.weeklyFrequency, 1, 14),
-      monthlyLimit: integer(item.monthlyLimit, 1, 200), mandatory: item.mandatory !== false
-    }))
-  }));
+      items: list(row.items, 20, item => ({
+        serviceName: str(item.serviceName), serviceRef: extracted ? '' : str(item.serviceRef, 110),
+        includedCredits: integer(item.includedCredits, 1, 500), weeklyFrequency: integer(item.weeklyFrequency, 1, 14),
+        monthlyLimit: integer(item.monthlyLimit, 1, 200), mandatory: item.mandatory !== false
+      }))
+    };
+  });
 
   if (!extracted) return { services, packages };
 

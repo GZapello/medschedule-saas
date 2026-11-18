@@ -1571,9 +1571,21 @@ export const ServicesView: React.FC = () => {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <h4 className="font-bold text-slate-900 text-base truncate">{pkg.name}</h4>
-                          {!pkg.active && (
+                          {!pkg.active ? (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">
                               Inativo
+                            </span>
+                          ) : pkg.allow_public_booking === 0 ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                              Oculto no link público
+                            </span>
+                          ) : pkg.public_booking_diagnostics?.isPublicReady ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Publicado online
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                              Pendente p/ publicação
                             </span>
                           )}
                         </div>
@@ -1592,6 +1604,20 @@ export const ServicesView: React.FC = () => {
                     </div>
 
                     {pkg.description && <p className="text-xs text-slate-500 line-clamp-2">{pkg.description}</p>}
+
+                    {Boolean(pkg.active) && pkg.allow_public_booking !== 0 && pkg.public_booking_diagnostics && !pkg.public_booking_diagnostics.isPublicReady && pkg.public_booking_diagnostics.blockers?.length > 0 && (
+                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Não aparece no link público ainda:</span>
+                        </div>
+                        <ul className="list-disc pl-4 space-y-0.5 text-amber-800">
+                          {pkg.public_booking_diagnostics.blockers.map((blocker: string, idx: number) => (
+                            <li key={idx}>{blocker}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     <div className="space-y-1 pt-1">
                       <div className="text-[10px] font-bold uppercase text-slate-400">Modalidades incluídas</div>

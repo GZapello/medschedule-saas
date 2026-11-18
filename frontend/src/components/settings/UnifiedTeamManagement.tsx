@@ -76,6 +76,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'view_inventory', label: 'Visualizar estoque de insumos', group: 'inventory' },
   { id: 'manage_inventory', label: 'Movimentar e cadastrar itens no estoque', group: 'inventory' },
   { id: 'create_student_consumption', label: 'Lançar consumo de produtos para alunos', group: 'inventory' },
+  { id: 'view_enrollments', label: 'Consultar matrículas, planos e vigências (sem financeiro)', group: 'admin' },
+  { id: 'manage_contracts', label: 'Gerenciar matrículas, contratos e renovações', group: 'admin' },
   { id: 'manage_professionals', label: 'Gerenciar profissionais', group: 'admin' },
   { id: 'manage_staff', label: 'Gerenciar equipe e funcionários', group: 'admin' },
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas', group: 'admin' },
@@ -104,7 +106,9 @@ const PERMISSION_PRESETS = [
       'manage_budgets',
       'view_inventory',
       'manage_inventory',
-      'can_import_data'
+      'can_import_data',
+      'view_enrollments',
+      'manage_contracts'
     ]
   },
   {
@@ -121,7 +125,8 @@ const PERMISSION_PRESETS = [
       'view_exams',
       'view_budgets',
       'manage_budgets',
-      'can_import_data'
+      'can_import_data',
+      'view_enrollments'
     ]
   },
   {

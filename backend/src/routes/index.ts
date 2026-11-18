@@ -397,7 +397,10 @@ api.get('/v1/patients/:patientId/packages', requireTenant, requireStudioEstablis
 
 // Matrículas, Planos e Contratos (Academia & Studio)
 api.get('/v1/studio/enrollments', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['view_enrollments', 'manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.listEnrollments);
+api.get('/v1/studio/enrollments/:id', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['view_enrollments', 'manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.getEnrollmentDetail);
 api.post('/v1/studio/enrollments', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.createEnrollment);
+api.patch('/v1/studio/enrollments/:id', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.editEnrollment);
+api.post('/v1/studio/enrollments/public-requests/:requestId/approve', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.approvePublicRequest);
 api.post('/v1/studio/enrollments/:id/lifecycle', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist'), StudioAccessController.updateEnrollmentLifecycle);
 api.get('/v1/studio/enrollments/:id/history', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['view_enrollments', 'manage_contracts', 'manage_financial'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.getContractHistory);
 api.post('/v1/studio/enrollments/:contractId/entitlements/:entitlementId/deliver', requireTenant, requireStudioEstablishment, requirePermissionOrRole(['manage_contracts', 'view_attendance'], 'clinic_admin', 'receptionist', 'professional'), StudioAccessController.deliverEntitlement);

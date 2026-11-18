@@ -297,7 +297,7 @@ export function StudioCatalogImportView() {
           Confirme abaixo para gravar definitivamente no cadastro oficial de Serviços &amp; Pacotes. Serviços marcados para exibição pública ficam disponíveis imediatamente no link público do estabelecimento.
         </p>}
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={secondary} disabled={!!activity} onClick={() => void run('saving',
             () => ApiClient.put<ImportDraft>(endpoint + '/' + draft.id, { proposal: draft.proposal, revision: draft.revision }),
             'Rascunho salvo com diagnóstico atualizado.')}>
@@ -314,6 +314,13 @@ export function StudioCatalogImportView() {
             setDraft(null); setError(''); setMessage('');
           }}>{confirming ? 'Voltar à edição' : 'Voltar aos arquivos'}</button>
         </div>
+        {!ready && (
+          <p className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+            {selected.length === 0
+              ? 'Selecione ao menos 1 serviço ou pacote para Criar, Atualizar ou Vincular (ou use "Selecionar & aprovar itens prontos").'
+              : `Ainda falta marcar "Revisado" em ${selected.filter(r => !r.reviewed).length} item(ns) selecionado(s) para liberar a prévia de importação.`}
+          </p>
+        )}
       </div>
     </>}
   </section>;

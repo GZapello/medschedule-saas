@@ -21,6 +21,7 @@ export const DEFAULT_RECEPTIONIST_PERMISSIONS: string[] = [
   'view_reports',
   'can_import_data',
   'view_enrollments',
+  'manage_contracts',
   'view_attendance'
 ];
 

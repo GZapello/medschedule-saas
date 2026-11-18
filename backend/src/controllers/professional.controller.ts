@@ -527,16 +527,24 @@ export class ProfessionalController {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
 
+        const normClock = (raw: unknown, fallback: string | null): string | null => {
+          if (typeof raw !== 'string' || !raw.trim()) return fallback;
+          const m = raw.trim().match(/^(\d{1,2}):([0-5]\d)(?::[0-5]\d)?$/);
+          if (!m) return fallback;
+          const hh = Number(m[1]);
+          if (hh < 0 || hh > 23) return fallback;
+          return `${String(hh).padStart(2, '0')}:${m[2]}`;
+        };
         for (const s of schedules) {
           insertStmt.run(
             `sch-${uuidv4().slice(0, 8)}`,
             tenantId,
             id,
             Number(s.day_of_week),
-            s.start_time || '08:00',
-            s.end_time || '18:00',
-            s.break_start || null,
-            s.break_end || null,
+            normClock(s.start_time, '08:00')!,
+            normClock(s.end_time, '18:00')!,
+            normClock(s.break_start, null),
+            normClock(s.break_end, null),
             s.is_active ? 1 : 0
           );
         }

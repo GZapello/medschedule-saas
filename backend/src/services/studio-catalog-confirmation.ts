@@ -858,19 +858,20 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal) {
         if (duplicates) throw catalogError('Já existe um serviço com esse nome e tipo. Vincule-o ou diferencie o nome.');
       }
       const scheduled = type === 'group' || type === 'individual';
-      const capacity = current ? current.default_capacity : row.type === 'duo' ? 2 : row.capacity;
-      const duration = current ? current.duration_minutes : row.durationMinutes;
+      const capacity = current ? (current.default_capacity || (row.type === 'duo' ? 2 : row.capacity)) : (row.type === 'duo' ? 2 : row.capacity);
+      const duration = current ? (current.duration_minutes || row.durationMinutes) : row.durationMinutes;
 
       // Se cada horário já tem instrutor válido escolhido e o campo global estava vazio, utiliza o primeiro como responsável padrão sem exigir retrabalho.
       const fallbackSlotProf =
-        !current &&
         !row.professionalId &&
         !row.deferSchedules &&
         row.schedules.length > 0 &&
         row.schedules.every(s => catalog.professionals.some(p => p.id === s.professionalId))
           ? row.schedules[0].professionalId
           : '';
-      const professional = current ? current.professional_id : (row.professionalId || fallbackSlotProf);
+      const professional = (current
+        ? (row.professionalId || current.professional_id || fallbackSlotProf)
+        : (row.professionalId || fallbackSlotProf)) || '';
       if (isCreate && scheduled && !catalog.professionals.some(p => p.id === professional)) {
         throw catalogError('Selecione um profissional responsável ativo deste estabelecimento.');
       }

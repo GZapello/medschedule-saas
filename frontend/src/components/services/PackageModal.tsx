@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { isStudioProfile } from '../../utils/establishmentContext';
 import { PackageFormBody, PackageFormSection, StudioPackageIndicators, StudioPackagePresentation } from './StudioPackagePresentation';
 import { Service, Professional } from '../../types';
-import { X, Package, CheckCircle2, Layers, Repeat, Calendar, ShieldCheck, AlertCircle } from 'lucide-react';
+import { X, Package, CheckCircle2, Layers, Repeat, ShieldCheck, AlertCircle, AlertTriangle } from 'lucide-react';
 
 interface PackageItemDraft {
   serviceId: string;
@@ -132,8 +132,66 @@ export const PackageModal: React.FC<PackageModalProps> = ({
   const profNameById = new Map<string, string>();
   professionals.forEach(p => profNameById.set(p.id, p.name));
 
-  const srvById = new Map<string, Service>();
-  services.forEach(s => srvById.set(s.id, s));
+  const srvById = useMemo(() => {
+    const m = new Map<string, Service>();
+    services.forEach(s => m.set(s.id, s));
+    return m;
+  }, [services]);
+
+  const profById = useMemo(() => {
+    const m = new Map<string, Professional>();
+    professionals.forEach(p => m.set(p.id, p));
+    return m;
+  }, [professionals]);
+
+  const getServicePublicIssues = (srv: Service): string[] => {
+    const issues: string[] = [];
+    const isAccess = srv.studio_service_type === 'facility_access';
+    const isDeliverable = srv.studio_service_type === 'non_scheduled';
+    const requiresAppt = !isAccess && !isDeliverable && Number(srv.requires_appointment ?? 1) !== 0;
+
+    if (Number(srv.active ?? 1) !== 1) {
+      issues.push(`O serviço "${srv.name}" está inativo. Reative-o no cadastro de Serviços ou remova-o do pacote.`);
+    }
+    if (srv.allow_public_booking === 0 || srv.allow_public_booking === false) {
+      issues.push(`O serviço "${srv.name}" está com "Disponibilizar no agendamento público" desativado.`);
+    }
+    if (requiresAppt) {
+      const linked = Array.isArray(srv.linked_professionals) && srv.linked_professionals.length > 0
+        ? srv.linked_professionals
+        : (srv.professional_id && profById.has(srv.professional_id)
+            ? [profById.get(srv.professional_id)!]
+            : []);
+      const activeLinked = linked.filter(p => Number(p.active ?? 1) === 1);
+      const publicLinked = activeLinked.filter(p => Number(p.public_booking_enabled ?? 1) === 1);
+
+      if (activeLinked.length === 0) {
+        issues.push(
+          linked.length > 0
+            ? `O instrutor vinculado a "${srv.name}" está inativo.`
+            : `O serviço "${srv.name}" não possui nenhum profissional/instrutor ativo vinculado.`
+        );
+      } else if (publicLinked.length === 0) {
+        issues.push(
+          `O(s) instrutor(es) de "${srv.name}" (${activeLinked.map(p => p.name).join(', ')}) está(ão) com agendamento público desativado em Links de Agendamento.`
+        );
+      }
+
+      if (srv.service_kind === 'group') {
+        const diag = srv.schedule_diagnostics;
+        if (diag && !diag.isPublicReady) {
+          issues.push(
+            diag.blockers?.[0]
+              ? `"${srv.name}": ${diag.blockers[0]}`
+              : `A turma "${srv.name}" não possui horários publicados na grade semanal.`
+          );
+        } else if (!diag && (!Array.isArray(srv.class_schedules) || srv.class_schedules.filter(c => Number(c.active) !== 0).length === 0)) {
+          issues.push(`A aula coletiva "${srv.name}" ainda não possui horários cadastrados na grade semanal.`);
+        }
+      }
+    }
+    return issues;
+  };
 
   const selectedItems = Object.values(itemMap).filter(i => i.selected);
   const perServiceComputedTotal = selectedItems.reduce((sum, it) => {
@@ -141,6 +199,30 @@ export const PackageModal: React.FC<PackageModalProps> = ({
     if (srv?.studio_service_type === 'facility_access') return sum;
     return sum + (Number(it.includedCredits) || 0);
   }, 0);
+
+  const packagePublicBlockers = useMemo(() => {
+    const list: string[] = [];
+    if (currentTenant && Number(currentTenant.public_booking_enabled ?? 0) !== 1) {
+      list.push('O link público de agendamento do estabelecimento está desativado em Links de Agendamento.');
+    }
+    if (!active) {
+      list.push('Este pacote está marcado como inativo no catálogo.');
+    }
+    if (!allowPublicBooking) {
+      list.push('A opção "Disponibilizar no agendamento público do Studio" está desmarcada.');
+    }
+    if (selectedItems.length === 0) {
+      list.push('Selecione ao menos um serviço ou benefício incluído neste pacote.');
+    }
+    for (const it of selectedItems) {
+      const srv = srvById.get(it.serviceId);
+      if (!srv) continue;
+      for (const issue of getServicePublicIssues(srv)) {
+        if (!list.includes(issue)) list.push(issue);
+      }
+    }
+    return list;
+  }, [currentTenant, active, allowPublicBooking, selectedItems, srvById, profById]);
 
   const toggleService = (serviceId: string) => {
     setItemMap(prev => ({
@@ -279,6 +361,20 @@ export const PackageModal: React.FC<PackageModalProps> = ({
         </div>
 
         <StudioPackageIndicators />
+
+        {active && allowPublicBooking && packagePublicBlockers.length > 0 && (editingPackage || selectedItems.length > 0) && (
+          <div className="mx-5 sm:mx-6 mt-2.5 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs shrink-0 space-y-1">
+            <div className="font-bold flex items-center gap-1.5 text-amber-800">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>Pendências para este pacote aparecer no link público:</span>
+            </div>
+            <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-amber-800">
+              {packagePublicBlockers.map((blocker, idx) => (
+                <li key={idx}>{blocker}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className={isPureStudio ? 'flex flex-col min-h-0 flex-1 text-xs' : 'overflow-y-auto p-5 sm:p-6 space-y-5 text-xs flex-1'}>
@@ -510,6 +606,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                   const profName = srv.professional_id ? profNameById.get(srv.professional_id) : null;
                   const isAccess = srv.studio_service_type === 'facility_access';
                   const isDeliverable = srv.studio_service_type === 'non_scheduled';
+                  const srvPublicIssues = getServicePublicIssues(srv);
                   return (
                     <div
                       key={srv.id}
@@ -525,10 +622,20 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                           className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 shrink-0"
                         />
                         <div className="min-w-0">
-                          <div className={`font-bold text-slate-900 ${isPureStudio ? "break-words" : "truncate"}`}>{srv.name}</div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className={`font-bold text-slate-900 ${isPureStudio ? "break-words" : "truncate"}`}>{srv.name}</span>
+                            {srvPublicIssues.length > 0 && (
+                              <span
+                                title={srvPublicIssues[0]}
+                                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200"
+                              >
+                                Pendência p/ publicação online
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-2">
                             {isAccess ? (
-                              <span className="text-indigo-700 font-semibold">Plano de Acesso (Catraca / Sem agenda)</span>
+                              <span className="text-indigo-700 font-semibold">Plano de Acesso (Sem agenda / sem horário fixo)</span>
                             ) : isDeliverable ? (
                               <span className="text-amber-700 font-semibold">Benefício Entregável (Sem agenda)</span>
                             ) : (
@@ -668,6 +775,30 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                 <span className="font-semibold text-slate-700">Pacote ativo no catálogo</span>
               </label>
             </div>
+
+            {packagePublicBlockers.length === 0 ? (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold">Pronto para exibição no link público</div>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    Este pacote atende a todos os requisitos e será exibido para contratação online.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>Diagnóstico do Link Público — o que falta configurar:</span>
+                </div>
+                <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-800">
+                  {packagePublicBlockers.map((blocker, idx) => (
+                    <li key={idx}>{blocker}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           </PackageFormSection>

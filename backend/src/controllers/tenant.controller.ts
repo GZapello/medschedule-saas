@@ -1570,10 +1570,19 @@ export class TenantController {
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
       const publicProfessionals = (professionals as any[]).map(p => {
         const profServices = db.prepare(`
-          SELECT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
+          SELECT DISTINCT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
           FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
-          WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
-        `).all(p.id, resolved.id, p.id, p.id) as any[];
+          WHERE s.tenant_id = ? AND s.active = 1 AND (
+            s.professional_id = ?
+            OR ps.professional_id = ?
+            OR (
+              ? = 1 AND EXISTS (
+                SELECT 1 FROM class_schedules cs
+                WHERE cs.service_id = s.id AND cs.tenant_id = s.tenant_id AND cs.professional_id = ? AND cs.active = 1
+              )
+            )
+          )
+        `).all(p.id, resolved.id, p.id, p.id, isStudioCompat ? 1 : 0, p.id) as any[];
         const activeDaysRows = db.prepare(`
           SELECT DISTINCT day_of_week FROM schedules
           WHERE tenant_id = ? AND professional_id = ? AND is_active = 1
@@ -1719,15 +1728,23 @@ export class TenantController {
       const rawPackages = isStudioCompat
         ? PackageService.listCatalogPackages(resolved.id, { publicOnly: true })
         : [];
-      const packages = rawPackages.map((pkg: any) => ({
+      const packages = rawPackages.map(({ public_booking_diagnostics, ...pkg }: any) => ({
         ...pkg,
         items: (pkg.items || []).map((item: any) => {
           const scheds = publicSchedulesByService.get(item.service_id) || [];
+          const recCfg = parseServiceRecurrenceConfig(item);
           return {
             ...item,
+            allow_recurrence: recCfg.allowRecurrence ? 1 : 0,
+            allowed_recurrence_frequencies: recCfg.allowedFrequencies,
+            default_recurrence_frequency: recCfg.defaultFrequency,
+            allowed_plan_durations: recCfg.allowedPlanDurations,
+            default_plan_duration: recCfg.defaultPlanDuration,
+            custom_recurrence_intervals: recCfg.customIntervals,
+            default_recurrence_interval: recCfg.defaultCustomInterval,
             class_schedules: scheds,
             weekly_schedule_summary: buildWeeklyScheduleSummary(scheds),
-            has_public_schedules: scheds.length > 0
+            has_public_schedules: item.requires_appointment === 0 || item.service_kind !== 'group' || scheds.length > 0
           };
         })
       }));

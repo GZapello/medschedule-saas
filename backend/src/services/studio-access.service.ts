@@ -602,10 +602,13 @@ export class StudioAccessService {
     cancelFuturePendingPayments?: boolean;
     cancelFutureScheduledAppointments?: boolean;
     markFirstPaymentPaid?: boolean;
+    generateRenewalCharge?: boolean;
     paymentMethod?: string;
     newServiceId?: string;
+    newCommercialOptionId?: string;
     newAmount?: number;
     newEndDate?: string | null;
+    newDurationCode?: string;
     actorId: string;
   }): any {
     this.ensureStudioCompatible(params.tenantId);
@@ -692,14 +695,45 @@ export class StudioAccessService {
       } else if (params.action === 'renew') {
         nextStatus = 'active';
         nextContractStatus = 'active';
+        nextFrozenFrom = null;
+        nextFrozenUntil = null;
+        nextFreezeReason = null;
+        const durationToUse = (params.newDurationCode || plan.plan_duration_code || '1_month') as PlanDurationCode;
         const baseForRenew = nextEndDate && nextEndDate >= todayIso ? addDaysIso(nextEndDate, 1) : todayIso;
         nextEndDate = params.newEndDate
           ? String(params.newEndDate).slice(0, 10)
-          : (resolvePlanDurationEndDate(baseForRenew, plan.plan_duration_code || '1_month') || addDaysIso(baseForRenew, 30));
+          : (resolvePlanDurationEndDate(baseForRenew, durationToUse) || addDaysIso(baseForRenew, 30));
+        if (params.newDurationCode) {
+          db.prepare(`UPDATE recurring_billing_plans SET plan_duration_code = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`)
+            .run(durationToUse, plan.id, params.tenantId);
+        }
+        const chargeAmount = params.newAmount !== undefined && Number(params.newAmount) > 0
+          ? Number(params.newAmount)
+          : Number(plan.amount || 0);
+        if (params.generateRenewalCharge && chargeAmount > 0) {
+          BillingCycleService.generateCyclesForPlanTx({
+            tenantId: params.tenantId,
+            plan: { ...plan, amount: chargeAmount, status: 'active' },
+            competenceMonth: baseForRenew.slice(0, 7),
+            initialPaymentStatus: params.markFirstPaymentPaid ? 'paid' : 'pending'
+          });
+        }
       } else if (params.action === 'change_plan') {
         let nextTitle = plan.title;
         let nextServiceId = plan.service_id;
         let nextAmount = params.newAmount !== undefined ? Math.max(0, Number(params.newAmount)) : Number(plan.amount);
+        let nextTotalAmount = Number(plan.total_contract_amount || nextAmount);
+        let nextPeriodicity = plan.payment_periodicity || 'monthly';
+        let nextBillingFreq = plan.billing_frequency || plan.billing_cycle || 'monthly';
+        let nextCycleMonths = Number(plan.cycle_months || 1);
+        let nextDurationCode = plan.plan_duration_code || '1_month';
+        let nextInstallments = Number(plan.installments_count || 1);
+        let nextAutoRenew = Boolean(plan.auto_renew);
+        let nextWeeklyFreq = plan.weekly_frequency;
+        let nextAccessMode = plan.access_mode_snapshot;
+        let nextAccessRulesJson = plan.access_rules_snapshot_json;
+        let nextCommercialJson = plan.commercial_snapshot_json;
+
         if (params.newServiceId) {
           const newSrv = db.prepare(`SELECT * FROM services WHERE id = ? AND tenant_id = ? AND active = 1`).get(params.newServiceId, params.tenantId) as any;
           if (!newSrv) {
@@ -709,8 +743,47 @@ export class StudioAccessService {
           }
           nextServiceId = newSrv.id;
           nextTitle = `Plano: ${newSrv.name}`;
-          if (params.newAmount === undefined) {
+
+          const commOptions = normalizeCommercialPriceOptions(newSrv.commercial_price_options_json);
+          const matchedOpt = params.newCommercialOptionId
+            ? commOptions.find(o => o.id === params.newCommercialOptionId && o.active)
+            : null;
+          if (matchedOpt) {
+            const breakdown = calculateCommercialOptionBreakdown(matchedOpt);
+            const normFreq = normalizePeriodicFrequency(
+              matchedOpt.paymentPeriodicity === 'bimonthly' ||
+                matchedOpt.paymentPeriodicity === 'quarterly' ||
+                matchedOpt.paymentPeriodicity === 'semiannual' ||
+                matchedOpt.paymentPeriodicity === 'annual'
+                ? matchedOpt.paymentPeriodicity
+                : 'monthly'
+            );
+            nextTitle = `${newSrv.name} • ${matchedOpt.label}`;
+            if (params.newAmount === undefined) {
+              nextAmount = breakdown.cycleAmountReais;
+              nextTotalAmount = breakdown.totalContractAmountReais;
+            } else {
+              nextTotalAmount = nextAmount;
+            }
+            nextPeriodicity = matchedOpt.paymentPeriodicity;
+            nextBillingFreq = normFreq.frequency;
+            nextCycleMonths = normFreq.cycleMonths;
+            nextDurationCode = matchedOpt.contractDurationCode;
+            nextInstallments = breakdown.installmentsCount;
+            nextAutoRenew = matchedOpt.autoRenew;
+            if (matchedOpt.accessType === 'limited' && matchedOpt.frequencyCount) {
+              nextWeeklyFreq = matchedOpt.frequencyType === 'monthly' ? nextWeeklyFreq : matchedOpt.frequencyCount;
+              nextAccessMode = 'limited';
+            } else if (matchedOpt.accessType === 'unlimited') {
+              nextAccessMode = 'unlimited';
+            }
+            nextCommercialJson = JSON.stringify({ option: matchedOpt, breakdown });
+          } else if (params.newAmount === undefined) {
             nextAmount = Number(newSrv.periodic_price) > 0 ? Number(newSrv.periodic_price) : Number(newSrv.price || plan.amount);
+            nextTotalAmount = nextAmount;
+          }
+          if (newSrv.access_config_json) {
+            nextAccessRulesJson = newSrv.access_config_json;
           }
         }
         if (params.newEndDate !== undefined) {
@@ -718,9 +791,19 @@ export class StudioAccessService {
         }
         db.prepare(`
           UPDATE recurring_billing_plans
-          SET service_id = ?, title = ?, amount = ?, end_date = ?, updated_at = datetime('now')
+          SET service_id = ?, title = ?, amount = ?, total_contract_amount = ?,
+              payment_periodicity = ?, billing_frequency = ?, billing_cycle = ?, cycle_months = ?,
+              plan_duration_code = ?, installments_count = ?, auto_renew = ?, weekly_frequency = ?,
+              access_mode_snapshot = ?, access_rules_snapshot_json = ?, commercial_snapshot_json = ?,
+              end_date = ?, updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
-        `).run(nextServiceId, nextTitle, nextAmount, nextEndDate, plan.id, params.tenantId);
+        `).run(
+          nextServiceId, nextTitle, nextAmount, nextTotalAmount,
+          nextPeriodicity, nextBillingFreq, nextBillingFreq, nextCycleMonths,
+          nextDurationCode, nextInstallments, nextAutoRenew ? 1 : 0, nextWeeklyFreq,
+          nextAccessMode, nextAccessRulesJson, nextCommercialJson,
+          nextEndDate, plan.id, params.tenantId
+        );
       }
 
       db.prepare(`
@@ -818,9 +901,48 @@ export class StudioAccessService {
       }
     } else if (params.action === 'renew') {
       nextPkgStatus = 'active';
+      nextFrozenFrom = null;
+      nextFrozenUntil = null;
+      nextFreezeReason = null;
       const valDays = Number(pkgContract.validity_days_snapshot || 30);
       const baseRenew = nextEndDate && nextEndDate >= todayIso ? addDaysIso(nextEndDate, 1) : todayIso;
       nextEndDate = params.newEndDate ? String(params.newEndDate).slice(0, 10) : addDaysIso(baseRenew, Math.max(1, valDays) - 1);
+      const renewAmount = params.newAmount !== undefined && Number(params.newAmount) > 0
+        ? Number(params.newAmount)
+        : Number(pkgContract.contracted_price || 0);
+      if (params.generateRenewalCharge && renewAmount > 0) {
+        if (pkgContract.recurring_plan_id) {
+          const linkedPlan = db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ? AND tenant_id = ?`).get(pkgContract.recurring_plan_id, params.tenantId) as any;
+          if (linkedPlan) {
+            BillingCycleService.generateCyclesForPlanTx({
+              tenantId: params.tenantId,
+              plan: { ...linkedPlan, amount: renewAmount, status: 'active' },
+              competenceMonth: baseRenew.slice(0, 7),
+              initialPaymentStatus: params.markFirstPaymentPaid ? 'paid' : 'pending'
+            });
+          }
+        } else {
+          const isPaidNow = Boolean(params.markFirstPaymentPaid);
+          db.prepare(`
+            INSERT INTO payments (
+              id, tenant_id, appointment_id, patient_id, amount, payment_method, status, payment_date,
+              notes, base_amount, due_date, package_contract_id, installment_number, total_installments
+            ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
+          `).run(
+            'pay-' + uuidv4().slice(0, 8),
+            params.tenantId,
+            pkgContract.student_id,
+            renewAmount,
+            params.paymentMethod || 'pix',
+            isPaidNow ? 'paid' : 'pending',
+            isPaidNow ? new Date().toISOString() : null,
+            `Renovação: ${pkgContract.package_name_snapshot}`,
+            renewAmount,
+            baseRenew,
+            pkgContract.id
+          );
+        }
+      }
     }
 
     db.prepare(`
@@ -887,8 +1009,12 @@ export class StudioAccessService {
     studentId?: string;
     status?: string;
     search?: string;
+    serviceId?: string;
+    period?: string;
+    kind?: string;
   }): {
     enrollments: any[];
+    pendingRequests: any[];
     summary: {
       activeCount: number;
       futureCount: number;
@@ -896,11 +1022,13 @@ export class StudioAccessService {
       suspendedCount: number;
       requestedCount: number;
       expiringSoonCount: number;
+      pendingPublicRequestsCount: number;
     };
   } {
     this.ensureStudioCompatible(tenantId);
     const { dateIso: todayIso } = getBrazilNowParts();
     const soonIso = addDaysIso(todayIso, 7);
+    const soon30Iso = addDaysIso(todayIso, 30);
 
     let planWhere = `rbp.tenant_id = ? AND rbp.package_contract_id IS NULL`;
     const planParams: any[] = [tenantId];
@@ -914,8 +1042,11 @@ export class StudioAccessService {
         rbp.*,
         pat.full_name as student_name,
         pat.phone as student_phone,
+        pat.whatsapp as student_whatsapp,
+        pat.email as student_email,
         pat.cpf as student_cpf,
         s.name as service_name,
+        s.modality_category as modality_category,
         COALESCE(s.studio_service_type, CASE WHEN COALESCE(s.service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
         s.access_config_json as service_access_config_json,
         (SELECT COUNT(*) FROM appointments a WHERE a.tenant_id = rbp.tenant_id AND a.recurring_plan_id = rbp.id AND a.status != 'cancelled') as scheduled_sessions_count,
@@ -971,11 +1102,15 @@ export class StudioAccessService {
         studentId: r.patient_id,
         studentName: r.student_name,
         studentPhone: r.student_phone,
+        studentWhatsapp: r.student_whatsapp || null,
+        studentEmail: r.student_email || null,
         studentCpf: r.student_cpf,
         serviceId: r.service_id,
         serviceName: r.service_name || r.title,
+        modalityCategory: r.modality_category || null,
         packageId: null,
         title: r.title,
+        notes: r.notes || null,
         lifecycleCategory,
         contractStatus: lifecycleCategory === 'expired' ? 'expired' : (r.contract_status || r.status),
         financialStatus,
@@ -1038,10 +1173,15 @@ export class StudioAccessService {
         studentId: c.student_id,
         studentName: c.student_name,
         studentPhone: c.student_phone,
+        studentWhatsapp: c.student_whatsapp || null,
+        studentEmail: c.student_email || null,
+        studentCpf: null,
         serviceId: null,
         serviceName: c.package_name_snapshot,
+        modalityCategory: null,
         packageId: c.package_id,
         title: c.package_name_snapshot,
+        notes: c.notes || null,
         lifecycleCategory,
         contractStatus: lifecycleCategory === 'expired' ? 'expired' : c.contract_status,
         financialStatus,
@@ -1077,6 +1217,9 @@ export class StudioAccessService {
 
     const search = filters?.search ? String(filters.search).trim().toLowerCase() : '';
     const statusFilter = filters?.status ? String(filters.status).trim().toLowerCase() : 'all';
+    const kindFilter = filters?.kind ? String(filters.kind).trim() : '';
+    const serviceFilter = filters?.serviceId ? String(filters.serviceId).trim() : '';
+    const periodFilter = filters?.period ? String(filters.period).trim().toLowerCase() : '';
 
     const filtered = enrollments.filter(item => {
       if (statusFilter && statusFilter !== 'all') {
@@ -1084,12 +1227,93 @@ export class StudioAccessService {
           return false;
         }
       }
+      if (kindFilter && kindFilter !== 'all') {
+        if (item.contractKind !== kindFilter && item.contractSource !== kindFilter) {
+          return false;
+        }
+      }
+      if (serviceFilter && serviceFilter !== 'all') {
+        const cleanPkgFilter = serviceFilter.startsWith('pkg:') ? serviceFilter.slice(4) : null;
+        if (cleanPkgFilter) {
+          if (item.packageId !== cleanPkgFilter) return false;
+        } else {
+          const matchesDirect = item.serviceId === serviceFilter || item.packageId === serviceFilter;
+          const matchesEnt = Array.isArray(item.entitlements) && item.entitlements.some((ent: any) =>
+            ent.service_id === serviceFilter ||
+            (Array.isArray(ent.allowed_service_ids) && ent.allowed_service_ids.includes(serviceFilter))
+          );
+          if (!matchesDirect && !matchesEnt) return false;
+        }
+      }
+      if (periodFilter && periodFilter !== 'all') {
+        if (periodFilter === 'expiring_7d') {
+          if (!(item.lifecycleCategory === 'active' && item.endDate && item.endDate >= todayIso && item.endDate <= soonIso)) {
+            return false;
+          }
+        } else if (periodFilter === 'expiring_30d') {
+          if (!(item.lifecycleCategory === 'active' && item.endDate && item.endDate >= todayIso && item.endDate <= soon30Iso)) {
+            return false;
+          }
+        } else if (periodFilter === 'expired') {
+          if (!(item.lifecycleCategory === 'expired' || (item.endDate && item.endDate < todayIso))) {
+            return false;
+          }
+        } else if (periodFilter === 'recurring') {
+          if (item.endDate && item.paymentPeriodicity === 'one_time') {
+            return false;
+          }
+        } else if (periodFilter === 'active_today') {
+          if (item.lifecycleCategory !== 'active') return false;
+        }
+      }
       if (search) {
-        const hay = `${item.studentName || ''} ${item.title || ''} ${item.serviceName || ''} ${item.studentPhone || ''}`.toLowerCase();
+        const hay = `${item.studentName || ''} ${item.title || ''} ${item.serviceName || ''} ${item.studentPhone || ''} ${item.studentEmail || ''}`.toLowerCase();
         if (!hay.includes(search)) return false;
       }
       return true;
     });
+
+    let pendingRequests: any[] = [];
+    try {
+      const reqRows = db.prepare(`
+        SELECT r.id, r.request_number, r.mode, r.service_id, r.start_date_iso,
+               r.weekdays_label, r.time_range_label, r.plan_duration_label,
+               r.patient_snapshot_json, r.payload_json, r.summary_snapshot_json, r.created_at
+        FROM public_booking_requests r
+        WHERE r.tenant_id = ?
+          AND r.establishment_mode = 'studio'
+          AND r.status = 'awaiting_confirmation'
+          AND r.mode IN ('access_plan', 'package')
+        ORDER BY r.created_at DESC
+        LIMIT 50
+      `).all(tenantId) as any[];
+
+      pendingRequests = reqRows.map(rr => {
+        let patSnap: any = {};
+        let payloadSnap: any = {};
+        let summarySnap: any = {};
+        try { patSnap = JSON.parse(rr.patient_snapshot_json || '{}'); } catch (_) {}
+        try { payloadSnap = JSON.parse(rr.payload_json || '{}'); } catch (_) {}
+        try { summarySnap = JSON.parse(rr.summary_snapshot_json || '{}'); } catch (_) {}
+        return {
+          id: rr.id,
+          requestNumber: rr.request_number,
+          mode: rr.mode,
+          serviceId: rr.service_id || payloadSnap.serviceId || null,
+          packageId: payloadSnap.packageId || null,
+          serviceName: summarySnap.serviceName || (rr.mode === 'package' ? 'Pacote online' : 'Plano de Acesso'),
+          studentName: patSnap.fullName || 'Aluno solicitante',
+          studentPhone: patSnap.phone || null,
+          startDate: rr.start_date_iso || payloadSnap.startDate || null,
+          accessLabel: rr.weekdays_label || summarySnap.accessLabel || null,
+          planDurationLabel: rr.plan_duration_label || summarySnap.planDurationLabel || null,
+          amount: payloadSnap.amount !== undefined && payloadSnap.amount !== null ? Number(payloadSnap.amount) : null,
+          createdAt: rr.created_at
+        };
+      });
+    } catch (_) {
+      pendingRequests = [];
+    }
 
     const summary = {
       activeCount: enrollments.filter(e => e.lifecycleCategory === 'active').length,
@@ -1097,10 +1321,300 @@ export class StudioAccessService {
       expiredCount: enrollments.filter(e => e.lifecycleCategory === 'expired').length,
       suspendedCount: enrollments.filter(e => e.lifecycleCategory === 'suspended').length,
       requestedCount: enrollments.filter(e => e.lifecycleCategory === 'requested').length,
-      expiringSoonCount: enrollments.filter(e => e.lifecycleCategory === 'active' && e.endDate && e.endDate >= todayIso && e.endDate <= soonIso).length
+      expiringSoonCount: enrollments.filter(e => e.lifecycleCategory === 'active' && e.endDate && e.endDate >= todayIso && e.endDate <= soonIso).length,
+      pendingPublicRequestsCount: pendingRequests.length
     };
 
-    return { enrollments: filtered, summary };
+    return { enrollments: filtered, pendingRequests, summary };
   }
 
+  /**
+   * Detalhamento completo de uma matrícula / contrato (aluno, regras, créditos/aulas, pagamentos e histórico).
+   */
+  static getEnrollmentDetail(tenantId: string, contractId: string): any | null {
+    this.ensureStudioCompatible(tenantId);
+    const listRes = this.listEnrollments(tenantId);
+    const enrollment = listRes.enrollments.find((e: any) => e.id === contractId);
+    if (!enrollment) return null;
+
+    const studentRow = db.prepare(`
+      SELECT id, full_name, phone, whatsapp, email, cpf, notes
+      FROM patients
+      WHERE id = ? AND tenant_id = ?
+      LIMIT 1
+    `).get(enrollment.studentId, tenantId) as any;
+
+    const payments = db.prepare(`
+      SELECT id, amount, base_amount, status, due_date, payment_date, payment_method,
+             competence_month, installment_number, total_installments, notes, created_at
+      FROM payments
+      WHERE tenant_id = ?
+        AND (${enrollment.contractSource === 'package_contract' ? 'package_contract_id = ?' : 'recurring_plan_id = ?'})
+      ORDER BY due_date ASC, created_at ASC
+    `).all(tenantId, contractId) as any[];
+
+    const appointments = db.prepare(`
+      SELECT a.id, a.service_id, a.professional_id, a.start_time, a.end_time, a.status,
+             a.attendance_status, a.modality, a.patient_notes as notes,
+             s.name as service_name, prof.name as professional_name
+      FROM appointments a
+      LEFT JOIN services s ON s.id = a.service_id AND s.tenant_id = a.tenant_id
+      LEFT JOIN professionals prof ON prof.id = a.professional_id AND prof.tenant_id = a.tenant_id
+      WHERE a.tenant_id = ?
+        AND (${enrollment.contractSource === 'package_contract' ? 'a.package_contract_id = ?' : 'a.recurring_plan_id = ?'})
+      ORDER BY a.start_time DESC
+      LIMIT 50
+    `).all(tenantId, contractId) as any[];
+
+    const history = db.prepare(`
+      SELECT h.*, u.name as performed_by_name
+      FROM student_contract_history h
+      LEFT JOIN users u ON u.id = h.created_by
+      WHERE h.tenant_id = ?
+        AND (h.recurring_plan_id = ? OR h.package_contract_id = ?)
+      ORDER BY h.created_at DESC
+      LIMIT 100
+    `).all(tenantId, contractId, contractId) as any[];
+
+    return {
+      enrollment,
+      student: studentRow ? {
+        id: studentRow.id,
+        fullName: studentRow.full_name,
+        phone: studentRow.phone,
+        whatsapp: studentRow.whatsapp || null,
+        email: studentRow.email || null,
+        cpf: studentRow.cpf || null,
+        notes: studentRow.notes || null
+      } : {
+        id: enrollment.studentId,
+        fullName: enrollment.studentName,
+        phone: enrollment.studentPhone,
+        whatsapp: enrollment.studentWhatsapp || null,
+        email: enrollment.studentEmail || null,
+        cpf: enrollment.studentCpf || null,
+        notes: null
+      },
+      entitlements: enrollment.entitlements || [],
+      appointments,
+      payments,
+      history
+    };
+  }
+
+  /**
+   * Edita metadados e regras operacionais de um contrato sem alterar pagamentos já liquidados/históricos.
+   */
+  static editEnrollmentTx(params: {
+    tenantId: string;
+    contractId: string;
+    title?: string;
+    dueDay?: number;
+    endDate?: string | null;
+    autoRenew?: boolean;
+    notes?: string | null;
+    accessMode?: 'unlimited' | 'limited';
+    maxEntriesPerWeek?: number | null;
+    maxEntriesPerMonth?: number | null;
+    actorId: string;
+  }): any {
+    this.ensureStudioCompatible(params.tenantId);
+    const plan = db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ? AND tenant_id = ?`).get(params.contractId, params.tenantId) as any;
+    const pkgContract = !plan
+      ? (db.prepare(`SELECT * FROM student_package_contracts WHERE id = ? AND tenant_id = ?`).get(params.contractId, params.tenantId) as any)
+      : null;
+
+    if (!plan && !pkgContract) {
+      const err: any = new Error('Contrato ou matrícula não encontrada neste estabelecimento.');
+      err.status = 404;
+      throw err;
+    }
+
+    if (params.dueDay !== undefined) {
+      const d = Number(params.dueDay);
+      if (!Number.isInteger(d) || d < 1 || d > 31) {
+        const err: any = new Error('Informe um dia de vencimento válido entre 1 e 31.');
+        err.status = 400;
+        throw err;
+      }
+    }
+
+    if (plan) {
+      const nextTitle = params.title !== undefined && String(params.title).trim() ? String(params.title).trim() : plan.title;
+      const nextDueDay = params.dueDay !== undefined ? Number(params.dueDay) : Number(plan.due_day || 10);
+      const nextEndDate = params.endDate !== undefined ? (params.endDate ? String(params.endDate).slice(0, 10) : null) : plan.end_date;
+      if (nextEndDate && plan.start_date && nextEndDate < plan.start_date) {
+        const err: any = new Error('A data final de vigência não pode ser anterior ao início do contrato.');
+        err.status = 400;
+        throw err;
+      }
+      const nextAutoRenew = params.autoRenew !== undefined ? (params.autoRenew ? 1 : 0) : Number(plan.auto_renew || 0);
+      const nextNotes = params.notes !== undefined ? (params.notes ? String(params.notes).trim() : null) : plan.notes;
+
+      const curCfg = normalizeStudioAccessConfig(plan.access_rules_snapshot_json);
+      const nextAccessMode = params.accessMode === 'limited' || params.accessMode === 'unlimited'
+        ? params.accessMode
+        : (plan.access_mode_snapshot || curCfg.accessMode);
+      const nextMaxWeek = params.maxEntriesPerWeek !== undefined
+        ? (params.maxEntriesPerWeek && params.maxEntriesPerWeek > 0 ? Number(params.maxEntriesPerWeek) : null)
+        : curCfg.maxEntriesPerWeek;
+      const nextMaxMonth = params.maxEntriesPerMonth !== undefined
+        ? (params.maxEntriesPerMonth && params.maxEntriesPerMonth > 0 ? Number(params.maxEntriesPerMonth) : null)
+        : curCfg.maxEntriesPerMonth;
+      const updatedCfg: StudioAccessConfig = {
+        ...curCfg,
+        accessMode: nextAccessMode === 'limited' ? 'limited' : 'unlimited',
+        maxEntriesPerWeek: nextAccessMode === 'unlimited' ? null : nextMaxWeek,
+        maxEntriesPerMonth: nextAccessMode === 'unlimited' ? null : nextMaxMonth
+      };
+      const nextWeeklyFreq = nextAccessMode === 'limited' ? (nextMaxWeek ?? plan.weekly_frequency) : null;
+
+      db.prepare(`
+        UPDATE recurring_billing_plans
+        SET title = ?, due_day = ?, end_date = ?, auto_renew = ?, notes = ?,
+            access_mode_snapshot = ?, access_rules_snapshot_json = ?, weekly_frequency = ?,
+            updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(
+        nextTitle,
+        nextDueDay,
+        nextEndDate,
+        nextAutoRenew,
+        nextNotes,
+        nextAccessMode,
+        JSON.stringify(updatedCfg),
+        nextWeeklyFreq,
+        plan.id,
+        params.tenantId
+      );
+
+      const updated = db.prepare(`SELECT * FROM recurring_billing_plans WHERE id = ? AND tenant_id = ?`).get(plan.id, params.tenantId);
+      this.recordContractHistoryTx({
+        tenantId: params.tenantId,
+        patientId: plan.patient_id,
+        recurringPlanId: plan.id,
+        action: 'UPDATE_CONTRACT',
+        summary: `Dados do contrato "${nextTitle}" editados`,
+        previousState: plan,
+        newState: updated,
+        createdBy: params.actorId
+      });
+      return updated;
+    }
+
+    const nextPkgTitle = params.title !== undefined && String(params.title).trim()
+      ? String(params.title).trim()
+      : pkgContract.package_name_snapshot;
+    const nextPkgDue = params.dueDay !== undefined ? Number(params.dueDay) : Number(pkgContract.due_day_snapshot || 10);
+    const nextPkgEnd = params.endDate !== undefined
+      ? (params.endDate ? String(params.endDate).slice(0, 10) : null)
+      : pkgContract.end_date;
+    if (nextPkgEnd && pkgContract.start_date && nextPkgEnd < pkgContract.start_date) {
+      const err: any = new Error('A data final de vigência não pode ser anterior ao início do contrato.');
+      err.status = 400;
+      throw err;
+    }
+    const nextPkgAutoRenew = params.autoRenew !== undefined
+      ? (params.autoRenew ? 1 : 0)
+      : Number(pkgContract.auto_renew_snapshot || 0);
+    const nextPkgNotes = params.notes !== undefined
+      ? (params.notes ? String(params.notes).trim() : null)
+      : pkgContract.notes;
+
+    db.prepare(`
+      UPDATE student_package_contracts
+      SET package_name_snapshot = ?, due_day_snapshot = ?, end_date = ?,
+          auto_renew_snapshot = ?, notes = ?, updated_at = datetime('now')
+      WHERE id = ? AND tenant_id = ?
+    `).run(
+      nextPkgTitle,
+      nextPkgDue,
+      nextPkgEnd,
+      nextPkgAutoRenew,
+      nextPkgNotes,
+      pkgContract.id,
+      params.tenantId
+    );
+
+    if (pkgContract.recurring_plan_id) {
+      db.prepare(`
+        UPDATE recurring_billing_plans
+        SET due_day = ?, end_date = ?, auto_renew = ?, notes = ?, updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(nextPkgDue, nextPkgEnd, nextPkgAutoRenew, nextPkgNotes, pkgContract.recurring_plan_id, params.tenantId);
+    }
+
+    const updatedPkg = PackageService.getContractById(params.tenantId, pkgContract.id);
+    this.recordContractHistoryTx({
+      tenantId: params.tenantId,
+      patientId: pkgContract.student_id,
+      packageContractId: pkgContract.id,
+      recurringPlanId: pkgContract.recurring_plan_id || null,
+      action: 'UPDATE_CONTRACT',
+      summary: `Dados do contrato de pacote "${nextPkgTitle}" editados`,
+      previousState: pkgContract,
+      newState: updatedPkg,
+      createdBy: params.actorId
+    });
+    return updatedPkg;
+  }
+
+  /**
+   * Remove campos financeiros restritos quando o usuário não possui permissão financeira.
+   */
+  static sanitizeEnrollmentForViewer(item: any, canViewFinancial: boolean): any {
+    if (canViewFinancial || !item) return item;
+    return {
+      ...item,
+      studentCpf: null,
+      financialStatus: null,
+      amount: null,
+      totalContractAmount: null,
+      billingFrequency: null,
+      paymentPeriodicity: null,
+      installmentsCount: null,
+      dueDay: null,
+      nextDueDate: null,
+      payments: []
+    };
+  }
+
+  static sanitizeContractHistoryForViewer(items: any[], canViewFinancial: boolean): any[] {
+    if (canViewFinancial) return items;
+    const redactSnapshotJson = (raw: string | null) => {
+      if (!raw) return null;
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object') {
+          for (const key of [
+            'amount', 'total_contract_amount', 'contracted_price', 'base_amount',
+            'payment_method', 'due_day', 'due_day_snapshot', 'payment_status',
+            'financialStatus', 'totalContractAmount', 'payments', 'student_cpf'
+          ]) {
+            if (key in obj) delete obj[key];
+          }
+          if (obj.commercial_snapshot_json) delete obj.commercial_snapshot_json;
+        }
+        return JSON.stringify(obj);
+      } catch {
+        return null;
+      }
+    };
+    return (items || []).map(it => ({
+      ...it,
+      previous_state_json: redactSnapshotJson(it.previous_state_json),
+      new_state_json: redactSnapshotJson(it.new_state_json)
+    }));
+  }
+
+  static sanitizeEnrollmentDetailForViewer(detail: any, canViewFinancial: boolean): any {
+    if (canViewFinancial || !detail) return detail;
+    return {
+      ...detail,
+      enrollment: this.sanitizeEnrollmentForViewer(detail.enrollment, false),
+      student: detail.student ? { ...detail.student, cpf: null } : detail.student,
+      payments: [],
+      history: this.sanitizeContractHistoryForViewer(detail.history || [], false)
+    };
+  }
 }

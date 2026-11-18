@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
 import { PackageService } from '../services/package.service';
+import { resolveEnrollmentViewerPermissions } from './studio-access.controller';
 import { canAccessPatient } from '../services/patient-sharing.service';
 import { canOperate } from '../services/billing.service';
 import { NotificationService } from '../services/notification.service';
@@ -220,11 +221,26 @@ export class PackageController {
         professionalFilter = ownIds[0] || '__none__';
       }
 
+      const viewerPerms = resolveEnrollmentViewerPermissions(req, tenantId);
+      const redactPkg = (c: any) =>
+        viewerPerms.canViewFinancial
+          ? c
+          : {
+              ...c,
+              contracted_price: null,
+              total_contract_amount: null,
+              payment_status: null,
+              due_day_snapshot: null,
+              billing_frequency_snapshot: null,
+              payment_periodicity_snapshot: null,
+              payments: []
+            };
+
       const contracts = PackageService.listContracts(tenantId, {
         studentId,
         status,
         professionalId: professionalFilter
-      });
+      }).map(redactPkg);
 
       res.json({ contracts });
     } catch (err: any) {
@@ -253,7 +269,20 @@ export class PackageController {
         return;
       }
 
-      const contracts = PackageService.listContracts(tenantId, { studentId });
+      const viewerPerms = resolveEnrollmentViewerPermissions(req, tenantId);
+      const rawContracts = PackageService.listContracts(tenantId, { studentId });
+      const contracts = viewerPerms.canViewFinancial
+        ? rawContracts
+        : rawContracts.map((c: any) => ({
+            ...c,
+            contracted_price: null,
+            total_contract_amount: null,
+            payment_status: null,
+            due_day_snapshot: null,
+            billing_frequency_snapshot: null,
+            payment_periodicity_snapshot: null,
+            payments: []
+          }));
       res.json({ contracts });
     } catch (err: any) {
       console.error('[PackageController.listStudentContracts] Erro:', err);
@@ -270,16 +299,30 @@ export class PackageController {
         return;
       }
 
-      const contract = PackageService.getContractById(tenantId, contractId);
-      if (!contract) {
+      const rawContract = PackageService.getContractById(tenantId, contractId);
+      if (!rawContract) {
         res.status(404).json({ error: 'Contratação de pacote não encontrada.' });
         return;
       }
 
-      if (req.user.role === 'professional' && !canAccessPatient(req.user.userId, tenantId, contract.student_id, 'appointments')) {
+      if (req.user.role === 'professional' && !canAccessPatient(req.user.userId, tenantId, rawContract.student_id, 'appointments')) {
         res.status(403).json({ error: 'Sem permissão para visualizar este contrato.' });
         return;
       }
+
+      const viewerPerms = resolveEnrollmentViewerPermissions(req, tenantId);
+      const contract = viewerPerms.canViewFinancial
+        ? rawContract
+        : {
+            ...rawContract,
+            contracted_price: null,
+            total_contract_amount: null,
+            payment_status: null,
+            due_day_snapshot: null,
+            billing_frequency_snapshot: null,
+            payment_periodicity_snapshot: null,
+            payments: []
+          };
 
       const ledger = db.prepare(`
         SELECT l.*, a.start_time as appointment_start_time, s.name as service_name
@@ -471,7 +514,10 @@ export class PackageController {
       }
 
       const srv = db.prepare(`
-        SELECT id, name, COALESCE(service_kind, 'individual') as service_kind, default_capacity,
+        SELECT id, name, COALESCE(service_kind, 'individual') as service_kind,
+               COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
+               COALESCE(requires_appointment, 1) as requires_appointment,
+               default_capacity,
                duration_minutes, price, COALESCE(allow_recurrence, 1) as allow_recurrence,
                allowed_recurrence_frequencies_json, allowed_recurrence_weekdays_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
@@ -483,6 +529,30 @@ export class PackageController {
 
       if (!srv) {
         res.status(404).json({ error: 'Serviço ou aula não encontrada.' });
+        return;
+      }
+
+      if (
+        Number(srv.requires_appointment ?? 1) === 0 ||
+        srv.studio_service_type === 'facility_access' ||
+        srv.studio_service_type === 'non_scheduled'
+      ) {
+        res.json({
+          date: typeof date === 'string' && date.trim() ? date.trim() : null,
+          serviceId: srv.id,
+          serviceKind: srv.service_kind,
+          studioServiceType: srv.studio_service_type,
+          requiresAppointment: false,
+          serviceModality: srv.modality || 'presential',
+          allowedModalities: getAllowedConcreteModalities(srv.modality, true),
+          professionals: [],
+          weeklySchedules: [],
+          weeklySummary: [],
+          totalAvailable: 0,
+          slots: [],
+          upcomingSlots: [],
+          emptyReason: 'Este plano ou benefício não exige escolha de dia, horário ou instrutor.'
+        });
         return;
       }
 
