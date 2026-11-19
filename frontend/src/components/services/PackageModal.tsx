@@ -127,8 +127,6 @@ export const PackageModal: React.FC<PackageModalProps> = ({
     setItemMap(initialMap);
   }, [isOpen, editingPackage, services]);
 
-  if (!isOpen) return null;
-
   const profNameById = new Map<string, string>();
   professionals.forEach(p => profNameById.set(p.id, p.name));
 
@@ -321,6 +319,8 @@ export const PackageModal: React.FC<PackageModalProps> = ({
       setSaving(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 mobile-modal">
@@ -607,6 +607,7 @@ export const PackageModal: React.FC<PackageModalProps> = ({
                   const isAccess = srv.studio_service_type === 'facility_access';
                   const isDeliverable = srv.studio_service_type === 'non_scheduled';
                   const srvPublicIssues = getServicePublicIssues(srv);
+
                   return (
                     <div
                       key={srv.id}
