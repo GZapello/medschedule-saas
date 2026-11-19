@@ -623,6 +623,7 @@ export function initializeDatabase(): void {
     addColIfMissing('clinical_exam_requests', 'is_sealed', 'INTEGER DEFAULT 0');
 
     // Catálogo de Serviços por Profissional
+    addColIfMissing('services', 'show_price_online', 'INTEGER NOT NULL DEFAULT 1');
     addColIfMissing('services', 'professional_id', 'TEXT REFERENCES professionals(id)');
     try {
       rawDb.exec(`

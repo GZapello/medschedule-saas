@@ -377,6 +377,8 @@ export const ServicesView: React.FC = () => {
   const [specialtyId, setSpecialtyId] = useState<string>('');
   const [durationMinutes, setDurationMinutes] = useState<number>(50);
   const [bufferMinutes, setBufferMinutes] = useState<number>(10);
+  const [showPriceOnline, setShowPriceOnline] = useState(true);
+  const [editShowPriceOnline, setEditShowPriceOnline] = useState(true);
   const [price, setPrice] = useState<string>('180.00');
   const [modality, setModality] = useState<'both' | 'presential' | 'online' | 'home'>('both');
   const [serviceDomain, setServiceDomain] = useState<ServiceDomain>(isPureStudio ? 'studio' : 'clinical');
@@ -797,6 +799,7 @@ export const ServicesView: React.FC = () => {
         durationMinutes: createRequiresAppointment ? Number(durationMinutes) : 0,
         bufferMinutes: createRequiresAppointment ? Number(bufferMinutes) : 0,
         price: normalizedCreatePrice,
+        ...(!showCreateStudioConfig ? { showPriceOnline } : {}),
         modality,
         serviceKind: effectiveKind,
         defaultCapacity: effectiveKind === 'group' ? Number(defaultCapacity) : null,
@@ -870,6 +873,7 @@ export const ServicesView: React.FC = () => {
       window.dispatchEvent(new CustomEvent('zemda-catalog-updated'));
       setShowServiceModal(false);
       setName('');
+      setShowPriceOnline(true);
       setServiceDomain(isPureStudio ? 'studio' : 'clinical');
       setServiceKind('individual');
       setDefaultCapacity(10);
@@ -971,6 +975,7 @@ export const ServicesView: React.FC = () => {
     setEditSpecialtyId(s.specialty_id || '');
     setEditDurationMinutes(isEditNonScheduled ? Number(s.duration_minutes || 0) : (s.duration_minutes || 50));
     setEditBufferMinutes(isEditNonScheduled ? Number(s.buffer_minutes || 0) : (s.buffer_minutes || 10));
+    setEditShowPriceOnline(s.show_price_online !== 0);
     setEditPrice(s.price !== undefined && s.price !== null ? String(s.price) : '0.00');
     setEditModality(s.modality || 'both');
     setEditServiceDomain(domain);
@@ -1121,6 +1126,7 @@ export const ServicesView: React.FC = () => {
         durationMinutes: editRequiresAppointment ? Number(editDurationMinutes) : 0,
         bufferMinutes: editRequiresAppointment ? Number(editBufferMinutes) : 0,
         price: normalizedEditPrice,
+        ...(!showEditStudioConfig ? { showPriceOnline: editShowPriceOnline } : {}),
         modality: editModality,
         serviceKind: effectiveEditKind,
         defaultCapacity: effectiveEditKind === 'group' ? Number(editDefaultCapacity) : null,
@@ -1337,6 +1343,7 @@ export const ServicesView: React.FC = () => {
     setAllowedWeekdays([]);
     setDefaultTemplateId('');
     setLinkedTemplateIds([]);
+    setShowPriceOnline(true);
     setShowServiceModal(true);
   };
 
@@ -2083,6 +2090,8 @@ export const ServicesView: React.FC = () => {
                     )}
                   </div>
 
+                  {!showCreateStudioConfig && <label className="flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" checked={showPriceOnline} onChange={e => setShowPriceOnline(e.target.checked)} />Exibir valor no agendamento online</label>}
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">Duração (minutos)</label>
@@ -2693,6 +2702,8 @@ export const ServicesView: React.FC = () => {
                       <span className="block text-[10px] text-slate-500 mt-0.5">Atendimento apenas por planos comerciais</span>
                     )}
                   </div>
+
+                  {!showEditStudioConfig && <label className="flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" checked={editShowPriceOnline} onChange={e => setEditShowPriceOnline(e.target.checked)} />Exibir valor no agendamento online</label>}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>

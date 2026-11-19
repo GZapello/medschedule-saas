@@ -655,7 +655,8 @@ export class ProfessionalController {
 
       // Busca serviços ESTRITAMENTE vinculados a esse profissional
       const services = db.prepare(`
-        SELECT s.id, s.name, s.description,
+        SELECT s.id, s.name, s.description, COALESCE(s.show_price_online, 1) as show_price_online,
+               CASE WHEN COALESCE(s.show_price_online, 1) = 0 THEN NULL WHEN ps.custom_price > 0 THEN ps.custom_price ELSE s.price END as price,
                COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
                s.modality
         FROM services s

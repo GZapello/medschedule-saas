@@ -1542,7 +1542,7 @@ export class TenantController {
 
       const isStudioCompat = PackageService.isStudioCompatible(resolved.id);
       const services = db.prepare(`
-        SELECT s.id, s.name, s.description, s.specialty_id, s.modality, s.price, s.duration_minutes,
+        SELECT s.id, s.name, s.description, s.specialty_id, s.modality, s.price, COALESCE(s.show_price_online, 1) as show_price_online, s.duration_minutes,
                s.professional_id, COALESCE(s.service_kind, 'individual') as service_kind,
                s.default_capacity, COALESCE(s.allow_recurrence, 1) as allow_recurrence,
                s.allowed_recurrence_frequencies_json, s.allowed_recurrence_weekdays_json, s.default_recurrence_frequency,
@@ -1594,7 +1594,8 @@ export class TenantController {
       const todayStr = getLocalTodayYmd(getTenantTimezone(db, resolved.id));
       const publicProfessionals = (professionals as any[]).map(p => {
         const profServices = db.prepare(`
-          SELECT DISTINCT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
+          SELECT DISTINCT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality,
+                 CASE WHEN COALESCE(s.show_price_online, 1) = 0 THEN NULL WHEN ps.custom_price > 0 THEN ps.custom_price ELSE s.price END AS price
           FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
           WHERE s.tenant_id = ? AND s.active = 1 AND (
             s.professional_id = ?
@@ -1658,7 +1659,9 @@ export class TenantController {
           srv.frequency_pricing = isStudioCompat && resolvedDomain === 'studio' ? readFrequencyPricing(srv.frequency_pricing_json) : null;
           delete srv.frequency_pricing_json;
           if (!isStudioCompat) {
-            delete srv.price;
+            if (Number(srv.show_price_online ?? 1) === 0) {
+              delete srv.price;
+            }
             delete srv.periodic_price;
             delete srv.pricing_rule;
             delete srv.is_price_customized;
@@ -1762,8 +1765,16 @@ export class TenantController {
             ...srvPublicSafe,
             ...(isStudioCompat
               ? {
-                  price: commercialModes.standalonePrice !== null ? commercialModes.standalonePrice : 0,
-                  standalone_price: commercialModes.standalonePrice,
+                  price:
+                    resolvedDomain !== 'studio' && Number(srv.show_price_online ?? 1) === 0
+                      ? null
+                      : commercialModes.standalonePrice !== null
+                      ? commercialModes.standalonePrice
+                      : 0,
+                  standalone_price:
+                    resolvedDomain !== 'studio' && Number(srv.show_price_online ?? 1) === 0
+                      ? null
+                      : commercialModes.standalonePrice,
                   periodic_price: srv.periodic_price ?? null,
                   is_price_customized:
                     srv.is_price_customized !== undefined && srv.is_price_customized !== null

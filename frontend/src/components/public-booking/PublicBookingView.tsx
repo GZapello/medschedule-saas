@@ -188,6 +188,21 @@ export const PublicBookingView: React.FC<Props> = ({
     );
   }, [service, professional]);
 
+  const getVisibleServicePrice = (srv: any, prof: any): number | null => {
+    if (!srv || srv.show_price_online === 0) return null;
+    const linkPrice = prof?.services?.find((link: any) => link.id === srv.id)?.price;
+    const raw = linkPrice !== undefined && linkPrice !== null ? linkPrice : srv.price;
+    if (raw === undefined || raw === null || raw === '') return null;
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : null;
+  };
+  const formatBRL = (value: number) =>
+    value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const servicePrice = useMemo(
+    () => getVisibleServicePrice(service, professional),
+    [service, professional]
+  );
+
   const modality = service?.modality === 'both' ? 'presential' : service?.modality;
   const [selectedModality, setSelectedModality] = useState('presential');
   const bookingModality = service?.modality === 'both' ? selectedModality : modality;
@@ -234,7 +249,9 @@ export const PublicBookingView: React.FC<Props> = ({
             services: (data.services || []).map((s: any) => ({
               id: s.id,
               duration_minutes: s.duration_minutes,
-              modality: s.modality
+              modality: s.modality,
+              price: s.price,
+              show_price_online: s.show_price_online
             }))
           };
           setProfessionals([p]);
@@ -509,14 +526,17 @@ export const PublicBookingView: React.FC<Props> = ({
             }}
           >
             <option value="">Escolha o atendimento</option>
-            {linkedServices.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.name} ·{' '}
-                {professional?.services?.find((link: any) => link.id === s.id)?.duration_minutes ||
-                  s.duration_minutes}{' '}
-                min
-              </option>
-            ))}
+            {linkedServices.map(s => {
+              const optionPrice = getVisibleServicePrice(s, professional);
+              return (
+                <option key={s.id} value={s.id}>
+                  {s.name} ·{' '}
+                  {professional?.services?.find((link: any) => link.id === s.id)?.duration_minutes ||
+                    s.duration_minutes}{' '}
+                  min{optionPrice !== null ? ` · ${formatBRL(optionPrice)}` : ''}
+                </option>
+              );
+            })}
           </select>
         </div>
       )}
@@ -545,6 +565,7 @@ export const PublicBookingView: React.FC<Props> = ({
         ['Especialidade', area || professional?.specialty_name || professional?.profession_name],
         ['Profissional', professional?.name],
         ['Atendimento', service ? `${service.name}${serviceDuration ? ` (${serviceDuration} min)` : ''}` : ''],
+        ['Valor', servicePrice !== null ? formatBRL(servicePrice) : ''],
         ['Data', date ? formatDateBR(date) : ''],
         ['Horário', slot?.time],
         ['Modalidade', modalityLabel(bookingModality || '')],
@@ -710,6 +731,11 @@ export const PublicBookingView: React.FC<Props> = ({
                             {serviceDuration} min
                           </span>
                         )}
+                        {servicePrice !== null && (
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-0.5 font-semibold text-emerald-700 border border-emerald-200/80">
+                            {formatBRL(servicePrice)}
+                          </span>
+                        )}
                         {bookingModality && (
                           <span className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-0.5 text-slate-600 border border-slate-200/80">
                             {bookingModality === 'online' ? (
@@ -850,6 +876,8 @@ export const PublicBookingView: React.FC<Props> = ({
                     ...new Set((p.services || []).map((s: any) => modalityLabel(s.modality)))
                   ].join(' · ');
                   const profDuration = p.services?.[0]?.duration_minutes;
+                  const profSingleService = p.services?.length === 1 ? services.find(s => s.id === p.services[0].id) : null;
+                  const profSinglePrice = profSingleService ? getVisibleServicePrice(profSingleService, p) : null;
 
                   return (
                     <button
@@ -910,6 +938,11 @@ export const PublicBookingView: React.FC<Props> = ({
                             <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                               <Clock aria-hidden="true" className="h-3 w-3" />
                               {profDuration} min
+                            </span>
+                          )}
+                          {profSinglePrice !== null && (
+                            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                              {formatBRL(profSinglePrice)}
                             </span>
                           )}
                           {p.next_available && (

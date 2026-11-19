@@ -642,7 +642,7 @@ export class ServiceController {
           COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
           s.buffer_minutes,
           CASE WHEN ps.custom_price > 0 THEN ps.custom_price ELSE COALESCE(s.price, 0) END as price,
-          s.price as catalog_base_price,
+          s.price as catalog_base_price, s.show_price_online,
           s.modality, s.active,
           COALESCE(s.service_kind, 'individual') as service_kind,
           s.default_capacity,
@@ -1613,6 +1613,17 @@ export class ServiceController {
         isStudioCompat && resolvedDomain === 'studio'
       );
 
+      const rawCreateShowPriceOnline = req.body.showPriceOnline ?? req.body.show_price_online;
+      const createShowPriceOnlineVal =
+        rawCreateShowPriceOnline === false ||
+        rawCreateShowPriceOnline === 0 ||
+        rawCreateShowPriceOnline === 'false' ||
+        rawCreateShowPriceOnline === '0'
+          ? 0
+          : 1;
+      if (resolvedDomain !== 'studio' && rawCreateShowPriceOnline !== undefined) {
+        db.prepare('UPDATE services SET show_price_online = ? WHERE id = ? AND tenant_id = ?').run(createShowPriceOnlineVal, id, tenantId);
+      }
       res.status(201).json({
         id,
         tenant_id: tenantId,
@@ -1625,6 +1636,7 @@ export class ServiceController {
         min_lead_time_hours: resolvedMinLeadTimeHours,
         max_advance_days: resolvedMaxAdvanceDays,
         price: effectiveCreatePrice,
+        show_price_online: resolvedDomain !== 'studio' && rawCreateShowPriceOnline !== undefined ? createShowPriceOnlineVal : 1,
         standalone_price: isStudioCompat && resolvedDomain === 'studio' ? createdModes.standalonePrice : effectiveCreatePrice,
         catalog_price:
           effectiveCreatePrice > 0
@@ -2475,6 +2487,17 @@ export class ServiceController {
       })();
 
       logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name, professionalId, studioServiceType: nextStudioType, linkedCount: requestedLinkedIds?.length });
+      const rawUpdateShowPriceOnline = req.body.showPriceOnline ?? req.body.show_price_online;
+      if (nextDomain !== 'studio' && rawUpdateShowPriceOnline !== undefined) {
+        const updateShowPriceOnlineVal =
+          rawUpdateShowPriceOnline === false ||
+          rawUpdateShowPriceOnline === 0 ||
+          rawUpdateShowPriceOnline === 'false' ||
+          rawUpdateShowPriceOnline === '0'
+            ? 0
+            : 1;
+        db.prepare('UPDATE services SET show_price_online = ? WHERE id = ? AND tenant_id = ?').run(updateShowPriceOnlineVal, id, tenantId);
+      }
       const updatedService = db.prepare(`
         SELECT s.*, COALESCE(s.service_kind, 'individual') as service_kind, COALESCE(s.allow_recurrence, 1) as allow_recurrence,
                p.name as professional_name

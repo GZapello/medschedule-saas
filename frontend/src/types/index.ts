@@ -222,6 +222,7 @@ export interface ServiceAvailabilityDiagnostics {
 }
 
 export interface Service {
+  show_price_online?: number;
   frequency_pricing?: import('../utils/studioFrequencyPricing').FrequencyPricing | null;
   availability_mode?: ServiceAvailabilityMode;
   availability_windows?: ServiceAvailabilityWindow[];

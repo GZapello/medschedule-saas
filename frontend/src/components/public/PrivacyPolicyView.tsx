@@ -92,7 +92,7 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
                 <span className="text-teal-600 font-mono">1.</span> Papéis na LGPD: Controlador vs. Operador
               </h2>
               <p>
-                A presente Política descreve como a plataforma <strong>Zemda</strong> (operada por <em>Zemda Tecnologia em Saúde</em>, com cadastro empresarial em estruturação: <em>[Razão Social e CNPJ a definir]</em>) trata dados pessoais em conformidade estrita com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).
+                A presente Política descreve como a plataforma <strong>Zemda</strong> trata dados pessoais em conformidade estrita com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).
               </p>
               <p>
                 Em respeito à transparência e à realidade arquitetural da plataforma, esclarecemos a divisão técnica e jurídica das responsabilidades:

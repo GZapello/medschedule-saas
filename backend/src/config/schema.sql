@@ -249,6 +249,7 @@ CREATE TABLE IF NOT EXISTS services (
   duration_minutes INTEGER NOT NULL DEFAULT 50,
   buffer_minutes INTEGER NOT NULL DEFAULT 10,
   price REAL NOT NULL DEFAULT 0.0,
+  show_price_online INTEGER NOT NULL DEFAULT 1,
   modality TEXT NOT NULL DEFAULT 'both' CHECK(modality IN ('presential', 'online', 'home', 'both')),
   active INTEGER NOT NULL DEFAULT 1,
   min_lead_time_hours INTEGER NOT NULL DEFAULT 2,
