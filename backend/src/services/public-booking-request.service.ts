@@ -27,6 +27,7 @@ import {
   buildFallbackBaseCommercialOption,
   calculateCommercialOptionBreakdown,
   calculatePlanWithAddonsBreakdown,
+  isCommercialOptionNonScheduled,
   normalizeCommercialPriceOptions,
   normalizeOptionalAddonsConfig,
   normalizeStudioAccessConfig,
@@ -880,7 +881,7 @@ function resolvePublicAddonsForBooking(params: {
     if (opt.allowPublicBooking === false) {
       throw Object.assign(new Error(`O complemento "${opt.label}" não está publicado para contratação online.`), { status: 400 });
     }
-    if (!addonAppliesToBaseOption(opt, baseOption?.id || null)) {
+    if (!addonAppliesToBaseOption(opt, baseOption)) {
       throw Object.assign(new Error(`O complemento "${opt.label}" não se aplica ao plano-base selecionado.`), { status: 400 });
     }
     const targetSrv = lookupSrv.get(opt.addonServiceId, tenantId) as any;
@@ -934,18 +935,70 @@ function resolvePublicAddonsForBooking(params: {
     }
   }
 
-  const expandedAddonSlots: ExpandedStudioSlotItem[] = [];
-  for (const sch of sanitizedSchedules) {
+  const breakdown = calculatePlanWithAddonsBreakdown({
+    baseOption,
+    selectedAddons
+  });
+
+  const expandedAddonSlots = expandAddonSchedulesForRequest({
+    tenantId,
+    rawAddonSchedules: sanitizedSchedules,
+    addonOptions: duringPurchaseAddons,
+    selectedAddonIds,
+    baseOption,
+    validateWeekdayAndPro: true
+  });
+
+  return {
+    selectedAddonIds,
+    selectedAddons,
+    rawAddonSchedules: sanitizedSchedules,
+    expandedAddonSlots,
+    breakdown
+  };
+}
+
+function expandAddonSchedulesForRequest(params: {
+  tenantId: string;
+  rawAddonSchedules: any[];
+  addonOptions: StudioOptionalAddonOption[];
+  selectedAddonIds: string[];
+  baseOption: StudioCommercialPriceOption;
+  validateWeekdayAndPro?: boolean;
+}): ExpandedStudioSlotItem[] {
+  const { tenantId, rawAddonSchedules, addonOptions, selectedAddonIds, baseOption, validateWeekdayAndPro } = params;
+  if (!Array.isArray(rawAddonSchedules) || rawAddonSchedules.length === 0) return [];
+
+  const breakdownByOptId = new Map<string, ReturnType<typeof calculatePlanWithAddonsBreakdown>['addons'][number]>();
+  const calc = calculatePlanWithAddonsBreakdown({
+    baseOption,
+    selectedAddons: addonOptions
+  });
+  for (const b of calc.addons) {
+    breakdownByOptId.set(b.optionId, b);
+  }
+
+  const groupedByOpt = new Map<
+    string,
+    {
+      opt: StudioOptionalAddonOption | null;
+      items: ExpandedStudioSlotItem[];
+    }
+  >();
+
+  for (const sch of rawAddonSchedules) {
     const matchedOpt =
-      (sch.addonOptionId ? duringPurchaseAddons.find((a) => a.id === String(sch.addonOptionId)) : null) ||
-      duringPurchaseAddons.find((a) => a.addonServiceId === String(sch.serviceId));
+      (sch.addonOptionId ? addonOptions.find((a) => a.id === String(sch.addonOptionId)) : null) ||
+      addonOptions.find((a) => selectedAddonIds.includes(a.id) && a.addonServiceId === String(sch.serviceId)) ||
+      addonOptions.find((a) => a.addonServiceId === String(sch.serviceId)) ||
+      null;
 
     const enabledPros =
       matchedOpt && Array.isArray(matchedOpt.enabledProfessionalIds) && matchedOpt.enabledProfessionalIds.length > 0
         ? matchedOpt.enabledProfessionalIds
         : undefined;
     const reqProf = sch.professionalId ? String(sch.professionalId) : 'any';
-    if (enabledPros && reqProf !== 'any' && !enabledPros.includes(reqProf)) {
+    if (validateWeekdayAndPro && enabledPros && reqProf !== 'any' && !enabledPros.includes(reqProf)) {
       throw Object.assign(
         new Error(`O profissional selecionado não está habilitado para o complemento "${matchedOpt?.label || 'Complemento'}".`),
         { status: 400, code: 'ADDON_PROFESSIONAL_NOT_ALLOWED' }
@@ -967,6 +1020,16 @@ function resolvePublicAddonsForBooking(params: {
         ? matchedOpt.allowedWeekdays
         : undefined;
 
+    const itemBreakdown = matchedOpt ? breakdownByOptId.get(matchedOpt.id) || null : null;
+    const effectiveCreditMode =
+      itemBreakdown?.creditMode ||
+      matchedOpt?.creditMode ||
+      (matchedOpt?.frequencyType === 'unlimited' ? 'unlimited' : 'fixed_credits');
+    const totalCreditsCap =
+      effectiveCreditMode === 'fixed_credits'
+        ? (itemBreakdown?.totalCreditsInDuration ?? itemBreakdown?.creditsPerCycle ?? matchedOpt?.creditsPerCycle ?? null)
+        : null;
+
     const expandedItems = expandStudioScheduleItem(tenantId, {
       serviceId: String(sch.serviceId),
       professionalId: reqProf,
@@ -974,11 +1037,19 @@ function resolvePublicAddonsForBooking(params: {
       modality: sch.modality,
       startTime: String(sch.startTime),
       endTime: sch.endTime ? String(sch.endTime) : undefined,
-      recurrence: sch.recurrence || undefined
+      recurrence: sch.recurrence || undefined,
+      creditMode: effectiveCreditMode,
+      creditsPerCycle: totalCreditsCap
     });
 
+    const groupKey = matchedOpt?.id || String(sch.serviceId);
+    if (!groupedByOpt.has(groupKey)) {
+      groupedByOpt.set(groupKey, { opt: matchedOpt, items: [] });
+    }
+    const bucket = groupedByOpt.get(groupKey)!;
+
     for (const exItem of expandedItems) {
-      if (allowedWeekdays) {
+      if (validateWeekdayAndPro && allowedWeekdays) {
         const ymd = exItem.startIso.slice(0, 10);
         const dow = getDayOfWeekFromYmd(ymd);
         if (!allowedWeekdays.includes(dow)) {
@@ -988,7 +1059,7 @@ function resolvePublicAddonsForBooking(params: {
           );
         }
       }
-      expandedAddonSlots.push({
+      bucket.items.push({
         ...exItem,
         allowedProfessionalIds: enabledPros,
         capacityOverride,
@@ -998,18 +1069,37 @@ function resolvePublicAddonsForBooking(params: {
     }
   }
 
-  const breakdown = calculatePlanWithAddonsBreakdown({
-    baseOption,
-    selectedAddons
-  });
+  const expandedAddonSlots: ExpandedStudioSlotItem[] = [];
+  for (const { opt, items } of groupedByOpt.values()) {
+    // Deduplica e ordena cronologicamente
+    const seen = new Set<string>();
+    const uniqueSorted = items
+      .sort((a, b) => a.startIso.localeCompare(b.startIso))
+      .filter((it) => {
+        const k = `${it.serviceRow.id}|${it.startIso}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
 
-  return {
-    selectedAddonIds,
-    selectedAddons,
-    rawAddonSchedules: sanitizedSchedules,
-    expandedAddonSlots,
-    breakdown
-  };
+    const itemBreakdown = opt ? breakdownByOptId.get(opt.id) || null : null;
+    const effectiveCreditMode =
+      itemBreakdown?.creditMode ||
+      opt?.creditMode ||
+      (opt?.frequencyType === 'unlimited' ? 'unlimited' : 'fixed_credits');
+    const totalCreditsCap =
+      effectiveCreditMode === 'fixed_credits'
+        ? (itemBreakdown?.totalCreditsInDuration ?? itemBreakdown?.creditsPerCycle ?? opt?.creditsPerCycle ?? null)
+        : null;
+
+    if (effectiveCreditMode === 'fixed_credits' && totalCreditsCap && totalCreditsCap > 0 && uniqueSorted.length > totalCreditsCap) {
+      expandedAddonSlots.push(...uniqueSorted.slice(0, totalCreditsCap));
+    } else {
+      expandedAddonSlots.push(...uniqueSorted);
+    }
+  }
+
+  return expandedAddonSlots;
 }
 
 function insertScheduledAddonAppointmentsTx(params: {
@@ -1619,10 +1709,21 @@ export class PublicBookingRequestService {
         `).get(String(serviceId), tenant.id) as any)
       : null;
 
+    const preNormalizedCommercialOpts = targetSrvRow
+      ? normalizeCommercialPriceOptions(targetSrvRow.commercial_price_options_json, {
+          studioServiceType: targetSrvRow.studio_service_type,
+          requiresAppointment: targetSrvRow.requires_appointment
+        }).filter(o => o.active && o.allowPublicBooking !== false)
+      : [];
+    const preMatchedCommercialOpt =
+      rawBody?.commercialOptionId
+        ? preNormalizedCommercialOpts.find(o => o.id === String(rawBody.commercialOptionId)) || null
+        : null;
+
     if (
       mode === 'access_plan' ||
       bookingIntent === 'access_plan' ||
-      (targetSrvRow && (targetSrvRow.studio_service_type === 'facility_access' || targetSrvRow.studio_service_type === 'non_scheduled' || Number(targetSrvRow.requires_appointment) === 0))
+      isCommercialOptionNonScheduled(targetSrvRow, preMatchedCommercialOpt)
     ) {
       const estProf = getTenantEstablishmentProfile(tenant.id);
       const targetModes = targetSrvRow ? resolveServiceCommercialModes(targetSrvRow, estProf) : null;
@@ -1632,11 +1733,8 @@ export class PublicBookingRequestService {
 
       const isDeliverable = targetSrvRow.studio_service_type === 'non_scheduled';
       const contractKind: 'access_plan' | 'deliverable' = isDeliverable ? 'deliverable' : 'access_plan';
-      const commercialOptions = normalizeCommercialPriceOptions(targetSrvRow.commercial_price_options_json)
-        .filter(o => o.active && o.allowPublicBooking !== false);
-      const matchedOption = rawBody?.commercialOptionId
-        ? commercialOptions.find(o => o.id === String(rawBody.commercialOptionId)) || null
-        : null;
+      const commercialOptions = preNormalizedCommercialOpts;
+      const matchedOption = preMatchedCommercialOpt;
       if (rawBody?.commercialOptionId && !matchedOption) {
         throw Object.assign(new Error('Opção comercial selecionada não está disponível para este plano.'), { status: 400 });
       }
@@ -2542,41 +2640,28 @@ export class PublicBookingRequestService {
     } else if (requestRow.mode === 'access_plan' || payload.type === 'studio_access_plan') {
       const rawAddonSchedules = Array.isArray(payload.addonSchedules) ? payload.addonSchedules : [];
       const baseSrvForAddons = payload.serviceId
-        ? (db.prepare(`SELECT optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`).get(String(payload.serviceId), tenantId) as any)
+        ? (db.prepare(`SELECT id, name, price, periodic_price, billing_mode, default_plan_duration, studio_service_type, requires_appointment, commercial_price_options_json, optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`).get(String(payload.serviceId), tenantId) as any)
         : null;
       const baseAddonsCfg = normalizeOptionalAddonsConfig(baseSrvForAddons?.optional_addons_json);
       const selectedIds = Array.isArray(payload.selectedAddonOptionIds) ? payload.selectedAddonOptionIds : [];
-      for (const sch of rawAddonSchedules) {
-        const matchedOpt =
-          (sch.addonOptionId ? baseAddonsCfg.options.find(o => o.id === String(sch.addonOptionId)) : null) ||
-          baseAddonsCfg.options.find(o => selectedIds.includes(o.id) && o.addonServiceId === String(sch.serviceId)) ||
-          baseAddonsCfg.options.find(o => o.addonServiceId === String(sch.serviceId));
-        const capOv = matchedOpt
-          ? (matchedOpt.attendanceFormat === 'individual'
-              ? 1
-              : matchedOpt.attendanceFormat === 'duo'
-                ? 2
-                : matchedOpt.attendanceFormat === 'group' && matchedOpt.sessionCapacity && matchedOpt.sessionCapacity >= 2
-                  ? matchedOpt.sessionCapacity
-                  : null)
-          : null;
-        const allowedPros =
-          matchedOpt && Array.isArray(matchedOpt.enabledProfessionalIds) && matchedOpt.enabledProfessionalIds.length > 0
-            ? matchedOpt.enabledProfessionalIds
-            : undefined;
-        const allowedDays =
-          matchedOpt && Array.isArray(matchedOpt.allowedWeekdays) && matchedOpt.allowedWeekdays.length > 0
-            ? matchedOpt.allowedWeekdays
-            : undefined;
-        for (const ex of expandStudioScheduleItem(tenantId, sch)) {
-          expandedAddonSlots.push({
-            ...ex,
-            allowedProfessionalIds: allowedPros,
-            capacityOverride: capOv,
-            allowedWeekdays: allowedDays,
-            addonOptionId: matchedOpt?.id || null
-          });
-        }
+      const baseCommOpts = baseSrvForAddons
+        ? normalizeCommercialPriceOptions(baseSrvForAddons.commercial_price_options_json, {
+            studioServiceType: baseSrvForAddons.studio_service_type,
+            requiresAppointment: baseSrvForAddons.requires_appointment
+          })
+        : [];
+      const baseOptForExpand =
+        (payload.commercialOptionId ? baseCommOpts.find(o => o.id === String(payload.commercialOptionId)) : null) ||
+        (baseSrvForAddons ? buildFallbackBaseCommercialOption(baseSrvForAddons) : null);
+      if (baseOptForExpand && rawAddonSchedules.length > 0) {
+        expandedAddonSlots = expandAddonSchedulesForRequest({
+          tenantId,
+          rawAddonSchedules,
+          addonOptions: baseAddonsCfg.options,
+          selectedAddonIds: selectedIds,
+          baseOption: baseOptForExpand,
+          validateWeekdayAndPro: false
+        });
       }
       if (expandedAddonSlots.length > 0) {
         studioExtBusyMap = await prefetchStudioExternalBusy(tenantId, expandedAddonSlots);
@@ -2604,41 +2689,28 @@ export class PublicBookingRequestService {
       });
       const rawAddonSchedules = Array.isArray(payload.addonSchedules) ? payload.addonSchedules : [];
       const baseSrvForAddons = payload.serviceId
-        ? (db.prepare(`SELECT optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`).get(String(payload.serviceId), tenantId) as any)
+        ? (db.prepare(`SELECT id, name, price, periodic_price, billing_mode, default_plan_duration, studio_service_type, requires_appointment, commercial_price_options_json, optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`).get(String(payload.serviceId), tenantId) as any)
         : null;
       const baseAddonsCfg = normalizeOptionalAddonsConfig(baseSrvForAddons?.optional_addons_json);
       const selectedIds = Array.isArray(payload.selectedAddonOptionIds) ? payload.selectedAddonOptionIds : [];
-      for (const sch of rawAddonSchedules) {
-        const matchedOpt =
-          (sch.addonOptionId ? baseAddonsCfg.options.find(o => o.id === String(sch.addonOptionId)) : null) ||
-          baseAddonsCfg.options.find(o => selectedIds.includes(o.id) && o.addonServiceId === String(sch.serviceId)) ||
-          baseAddonsCfg.options.find(o => o.addonServiceId === String(sch.serviceId));
-        const capOv = matchedOpt
-          ? (matchedOpt.attendanceFormat === 'individual'
-              ? 1
-              : matchedOpt.attendanceFormat === 'duo'
-                ? 2
-                : matchedOpt.attendanceFormat === 'group' && matchedOpt.sessionCapacity && matchedOpt.sessionCapacity >= 2
-                  ? matchedOpt.sessionCapacity
-                  : null)
-          : null;
-        const allowedPros =
-          matchedOpt && Array.isArray(matchedOpt.enabledProfessionalIds) && matchedOpt.enabledProfessionalIds.length > 0
-            ? matchedOpt.enabledProfessionalIds
-            : undefined;
-        const allowedDays =
-          matchedOpt && Array.isArray(matchedOpt.allowedWeekdays) && matchedOpt.allowedWeekdays.length > 0
-            ? matchedOpt.allowedWeekdays
-            : undefined;
-        for (const ex of expandStudioScheduleItem(tenantId, sch)) {
-          expandedAddonSlots.push({
-            ...ex,
-            allowedProfessionalIds: allowedPros,
-            capacityOverride: capOv,
-            allowedWeekdays: allowedDays,
-            addonOptionId: matchedOpt?.id || null
-          });
-        }
+      const baseCommOpts = baseSrvForAddons
+        ? normalizeCommercialPriceOptions(baseSrvForAddons.commercial_price_options_json, {
+            studioServiceType: baseSrvForAddons.studio_service_type,
+            requiresAppointment: baseSrvForAddons.requires_appointment
+          })
+        : [];
+      const baseOptForExpand =
+        (payload.commercialOptionId ? baseCommOpts.find(o => o.id === String(payload.commercialOptionId)) : null) ||
+        (baseSrvForAddons ? buildFallbackBaseCommercialOption(baseSrvForAddons) : null);
+      if (baseOptForExpand && rawAddonSchedules.length > 0) {
+        expandedAddonSlots = expandAddonSchedulesForRequest({
+          tenantId,
+          rawAddonSchedules,
+          addonOptions: baseAddonsCfg.options,
+          selectedAddonIds: selectedIds,
+          baseOption: baseOptForExpand,
+          validateWeekdayAndPro: false
+        });
       }
       studioExtBusyMap = await prefetchStudioExternalBusy(tenantId, expandedServiceSlots.concat(expandedAddonSlots));
     }

@@ -65,18 +65,24 @@ export const PlanWithAddonsBreakdownCard: React.FC<PlanWithAddonsBreakdownCardPr
                   + {addon.label}
                 </div>
                 <div className="text-[11px] text-slate-600 flex flex-wrap gap-1.5">
-                  {addon.creditsPerCycle !== null && (
+                  {addon.creditMode === 'weekly_guaranteed' ? (
                     <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold">
-                      {addon.creditsPerCycle} aula(s) por ciclo
+                      {addon.frequencyCount ? `${addon.frequencyCount}x/sem • ` : ''}Frequência semanal garantida
                     </span>
-                  )}
+                  ) : addon.creditsPerCycle !== null ? (
+                    <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold">
+                      {addon.creditsPerCycle} aula(s)/ciclo (créditos fixos)
+                    </span>
+                  ) : null}
                   {addon.frequencyType === 'unlimited' && (
                     <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold">
                       Frequência ilimitada
                     </span>
                   )}
                   <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                    {addon.durationMonths} {addon.durationMonths === 1 ? 'mês' : 'meses'} • {addon.autoRenew ? 'Com renovação' : 'Sem renovação auto'}
+                    {addon.durationMonths} {addon.durationMonths === 1 ? 'mês' : 'meses'}
+                    {addon.isIndependentDuration ? ' (duração independente)' : ' (segue plano-base)'}
+                    {' '}• {addon.autoRenew ? 'Com renovação' : 'Sem renovação auto'}
                   </span>
                 </div>
                 <div className="text-[10px] text-slate-500">

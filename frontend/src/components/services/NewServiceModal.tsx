@@ -572,11 +572,16 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5">
+          {showStudioConfig && studioServiceType === 'facility_access' ? (
+            <div className="p-3 rounded-xl bg-teal-50/70 border border-teal-200 text-[11px] text-teal-900">
+              <strong>Plano de Acesso à Academia (sem agenda / sem instrutor obrigatório):</strong> este serviço não exige profissional, módulo clínico, duração ou buffer. Profissionais e horários ficam nos serviços complementares (ex.: Acompanhamento Personal).
+            </div>
+          ) : (
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               Profissional Responsável{' '}
-              {showStudioConfig && (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled') ? (
-                <span className="text-slate-400 font-normal">(Opcional — plano de acesso livre/entregável)</span>
+              {showStudioConfig && studioServiceType === 'non_scheduled' ? (
+                <span className="text-slate-400 font-normal">(Opcional — entregável)</span>
               ) : (
                 <span className="text-rose-500">*</span>
               )}
@@ -597,10 +602,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 }
               }}
               className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-              required={!showStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')}
+              required={!showStudioConfig || studioServiceType !== 'non_scheduled'}
             >
               <option value="">
-                {showStudioConfig && (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled')
+                {showStudioConfig && studioServiceType === 'non_scheduled'
                   ? 'Sem profissional específico (Geral da Academia & Studio)'
                   : 'Selecione o profissional...'}
               </option>
@@ -611,7 +616,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               ))}
             </select>
 
-            {showStudioConfig && studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
+            {showStudioConfig && studioServiceType !== 'non_scheduled' && (
               <div className="mt-2">
                 <LinkedInstructorsSelector
                   professionals={professionals}
@@ -623,6 +628,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
               </div>
             )}
           </div>
+          )}
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
@@ -747,6 +753,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                     setAllowPublicSingleBooking(false);
                     setAllowPlanBooking(true);
                     setAllowPublicPlanBooking(true);
+                    setCommercialPriceOptions(prev =>
+                      prev.map(o => ({
+                        ...o,
+                        accessType: o.frequencyType === 'unlimited' ? 'unlimited' : 'limited'
+                      }))
+                    );
                   } else if (!professionalId && professionals.length > 0) {
                     const fallbackProf = initialProfessionalId || professionals[0].id;
                     setProfessionalId(fallbackProf);

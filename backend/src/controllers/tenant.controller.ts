@@ -1703,7 +1703,10 @@ export class TenantController {
             ? normalizeStudioPriceAdjustments(srv.pricing_adjustments_json)
             : [];
           const commercialPriceOptions = resolvedDomain === 'studio'
-            ? normalizeCommercialPriceOptions(srv.commercial_price_options_json).filter(o => o.active && o.allowPublicBooking !== false)
+            ? normalizeCommercialPriceOptions(srv.commercial_price_options_json, {
+                studioServiceType,
+                requiresAppointment
+              }).filter(o => o.active && o.allowPublicBooking !== false)
             : [];
           if (resolvedDomain === 'studio' && srv.optional_addons_json) {
             rawAddonsJsonByServiceId.set(srv.id, srv.optional_addons_json);

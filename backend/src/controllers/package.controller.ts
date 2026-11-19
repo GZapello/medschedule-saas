@@ -40,6 +40,7 @@ import {
   validateServiceRecurrenceFrequency, resolvePlanDurationEndDate
 } from '../utils/establishment-context';
 import {
+  addonAppliesToBaseOption,
   calculateCommercialOptionBreakdown,
   normalizeCommercialPriceOptions,
   normalizeOptionalAddonsConfig,
@@ -500,7 +501,7 @@ export class PackageController {
 
   static async getPublicStudioSlots(req: Request, res: Response): Promise<void> {
     try {
-      const { tenantSlug, bookingSequence, serviceId, date, professionalId, includeUpcoming, startDate, baseServiceId, addonOptionId } = req.query;
+      const { tenantSlug, bookingSequence, serviceId, date, professionalId, includeUpcoming, startDate, baseServiceId, addonOptionId, baseCommercialOptionId } = req.query;
       const tenant = resolveBookingTenant(tenantSlug, bookingSequence);
       if (!tenant || tenant.public_booking_enabled !== 1) {
         res.status(404).json({ error: 'Agendamento online indisponível.' });
@@ -527,7 +528,8 @@ export class PackageController {
                COALESCE(studio_service_type, CASE WHEN COALESCE(service_kind, 'individual') = 'group' THEN 'group' ELSE 'individual' END) as studio_service_type,
                COALESCE(requires_appointment, 1) as requires_appointment,
                default_capacity,
-               duration_minutes, price, COALESCE(allow_recurrence, 1) as allow_recurrence,
+               duration_minutes, buffer_minutes, min_lead_time_hours, max_advance_days,
+               price, COALESCE(allow_recurrence, 1) as allow_recurrence,
                allowed_recurrence_frequencies_json, allowed_recurrence_weekdays_json, default_recurrence_frequency,
                custom_recurrence_intervals_json, default_recurrence_interval_json,
                modality, modality_category, allowed_plan_durations_json, default_plan_duration, service_domain,
@@ -568,14 +570,31 @@ export class PackageController {
       let resolvedAddonOpt: StudioOptionalAddonOption | null = null;
       if (baseServiceId && addonOptionId) {
         const baseSrvRow = db
-          .prepare(`SELECT id, optional_addons_json FROM services WHERE id = ? AND tenant_id = ? AND active = 1`)
-          .get(String(baseServiceId), tenant.id) as { id: string; optional_addons_json?: string | null } | undefined;
+          .prepare(`SELECT id, studio_service_type, requires_appointment, commercial_price_options_json, optional_addons_json FROM services WHERE id = ? AND tenant_id = ? AND active = 1`)
+          .get(String(baseServiceId), tenant.id) as {
+            id: string;
+            studio_service_type?: string | null;
+            requires_appointment?: number | null;
+            commercial_price_options_json?: string | null;
+            optional_addons_json?: string | null;
+          } | undefined;
         if (baseSrvRow?.optional_addons_json) {
           const addonsCfg = normalizeOptionalAddonsConfig(baseSrvRow.optional_addons_json);
           const candidateOpt = addonsCfg.options.find(
             o => o.id === String(addonOptionId) && o.active && o.allowPublicBooking !== false && o.addonServiceId === srv.id
           );
           if (candidateOpt) {
+            if (baseCommercialOptionId && String(baseCommercialOptionId).trim()) {
+              const baseCommOpts = normalizeCommercialPriceOptions(baseSrvRow.commercial_price_options_json, {
+                studioServiceType: baseSrvRow.studio_service_type,
+                requiresAppointment: baseSrvRow.requires_appointment
+              });
+              const matchedBaseOpt = baseCommOpts.find(o => o.id === String(baseCommercialOptionId).trim()) || null;
+              if (matchedBaseOpt && !addonAppliesToBaseOption(candidateOpt, matchedBaseOpt)) {
+                res.status(400).json({ error: `O complemento "${candidateOpt.label}" não está habilitado para a opção comercial selecionada.` });
+                return;
+              }
+            }
             resolvedAddonOpt = candidateOpt;
           }
         }

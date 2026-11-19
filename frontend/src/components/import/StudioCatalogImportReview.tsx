@@ -54,18 +54,22 @@ const emptyAddon: ProposedAddonOption = {
   addonServiceRef: '',
   frequencyType: 'weekly',
   frequencyCount: 1,
+  creditMode: 'fixed_credits',
   creditsPerCycle: 4,
   additionalPriceCents: null,
   comboDiscountType: 'none',
   comboDiscountValue: null,
   billingPeriodicity: 'monthly',
-  durationMode: 'match_base',
-  scheduleTiming: 'after_confirmation',
+  durationMode: '1_month',
+  scheduleTiming: 'during_purchase',
   attendanceFormat: 'match_service',
   sessionCapacity: null,
   professionalSelectionMode: 'student_picks',
   enabledProfessionalIds: [],
   allowedWeekdays: [],
+  acceptedBasePriceKeys: [],
+  baseOptionScopeMode: 'selected',
+  baseOptionScopeUnclear: false,
   allowPublicBooking: true,
   mandatoryUnclear: false,
   ambiguousReason: '',
@@ -241,6 +245,9 @@ function ServiceEditor({
     a =>
       a.active &&
       (Boolean(a.mandatoryUnclear) ||
+        Boolean(a.baseOptionScopeUnclear) ||
+        a.baseOptionScopeMode === 'undecided' ||
+        (a.baseOptionScopeMode === 'selected' && (!Array.isArray(a.acceptedBasePriceKeys) || a.acceptedBasePriceKeys.length === 0)) ||
         a.additionalPriceCents === null ||
         (!a.addonServiceRef && !a.addonServiceName) ||
         (a.attendanceFormat === 'group' && (!a.sessionCapacity || a.sessionCapacity < 2)))
@@ -869,6 +876,23 @@ function ServiceEditor({
                           <NumberField label="Qtd. frequência" value={addon.frequencyCount} min={1} max={200} onChange={frequencyCount => change({ frequencyCount })} />
                         )}
                         {addon.frequencyType !== 'unlimited' && (
+                          <SelectField
+                            label="Regra de créditos"
+                            options={[
+                              ['fixed_credits', 'Créditos fixos por ciclo'],
+                              ['weekly_guaranteed', 'Frequência semanal garantida']
+                            ] as const}
+                            value={addon.creditMode || 'fixed_credits'}
+                            onChange={creditMode =>
+                              creditMode &&
+                              change({
+                                creditMode,
+                                ...(creditMode === 'weekly_guaranteed' ? { creditsPerCycle: null } : {})
+                              })
+                            }
+                          />
+                        )}
+                        {addon.frequencyType !== 'unlimited' && (addon.creditMode || 'fixed_credits') === 'fixed_credits' && (
                           <NumberField label="Créditos/aulas por ciclo" value={addon.creditsPerCycle} min={0} max={500} onChange={creditsPerCycle => change({ creditsPerCycle })} />
                         )}
                         <SelectField
@@ -1018,6 +1042,104 @@ function ServiceEditor({
                           })}
                         </div>
                       </div>
+
+                      {/* Seleção explícita de quais opções comerciais deste serviço aceitam o complemento */}
+                      {(() => {
+                        const existingSvc = row.action === 'update' ? draft.catalog.services.find(s => s.id === row.existingId) : null;
+                        const planChoices: Array<{ key: string; label: string }> = [
+                          ...row.prices
+                            .filter(p => !(p.unit === 'per_session' && !p.duration && !p.frequencyType))
+                            .map((p, pi) => {
+                              const pKey = p.key || `p${pi + 1}`;
+                              const durLbl = durations.find(([k]) => k === p.duration)?.[1] || '';
+                              const freqLbl =
+                                p.frequencyType === 'unlimited'
+                                  ? 'Acesso livre'
+                                  : p.frequencyCount
+                                    ? `${p.frequencyCount}x/${p.frequencyType === 'monthly' ? 'mês' : 'sem'}`
+                                    : '';
+                              const priceLbl = p.amountCents
+                                ? `R$ ${(p.amountCents / 100).toFixed(2).replace('.', ',')}`
+                                : '';
+                              const fullLbl = [p.label || durLbl || `Plano ${pi + 1}`, p.label ? '' : freqLbl, priceLbl].filter(Boolean).join(' — ');
+                              return { key: pKey, label: fullLbl };
+                            }),
+                          ...(existingSvc?.commercialOptions || []).map(co => ({
+                            key: `existing-opt:${co.id}`,
+                            label: `${co.label} — R$ ${(co.amountCents / 100).toFixed(2).replace('.', ',')} (já cadastrado)`
+                          }))
+                        ];
+                        if (planChoices.length === 0) return null;
+                        const scopeMode = addon.baseOptionScopeMode || (addon.baseOptionScopeUnclear ? 'undecided' : ((addon.acceptedBasePriceKeys || []).length > 0 ? 'selected' : 'all'));
+                        const needsScopeChoice = Boolean(addon.baseOptionScopeUnclear || scopeMode === 'undecided' || (scopeMode === 'selected' && (addon.acceptedBasePriceKeys || []).length === 0));
+                        return (
+                          <div className={`rounded-xl border p-3 space-y-2 ${needsScopeChoice ? 'border-amber-300 bg-amber-50/70' : 'border-teal-200 bg-teal-50/40'}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-xs font-bold text-slate-900">
+                                Em quais planos este acompanhamento poderá ser contratado?
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[11px]">
+                                <button
+                                  type="button"
+                                  onClick={() => change({ baseOptionScopeMode: 'selected', baseOptionScopeUnclear: false })}
+                                  className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
+                                    scopeMode === 'selected'
+                                      ? 'bg-teal-700 text-white border-teal-700'
+                                      : 'bg-white text-slate-600 border-slate-200'
+                                  }`}
+                                >
+                                  Somente nos planos selecionados
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => change({ baseOptionScopeMode: 'all', baseOptionScopeUnclear: false, acceptedBasePriceKeys: [] })}
+                                  className={`px-2 py-0.5 rounded-lg border font-bold cursor-pointer ${
+                                    scopeMode === 'all'
+                                      ? 'bg-slate-700 text-white border-slate-700'
+                                      : 'bg-white text-slate-600 border-slate-200'
+                                  }`}
+                                >
+                                  Todos os planos
+                                </button>
+                              </div>
+                            </div>
+                            {needsScopeChoice && (
+                              <p className="text-[11px] text-amber-900 font-medium">
+                                Selecione abaixo uma ou mais opções comerciais autorizadas (ou confirme se vale para todos os planos). O sistema não vincula automaticamente a todos os planos.
+                              </p>
+                            )}
+                            {scopeMode !== 'all' && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {planChoices.map(pc => {
+                                  const selected = Array.isArray(addon.acceptedBasePriceKeys) && addon.acceptedBasePriceKeys.includes(pc.key);
+                                  return (
+                                    <button
+                                      key={pc.key}
+                                      type="button"
+                                      onClick={() => {
+                                        const cur = Array.isArray(addon.acceptedBasePriceKeys) ? addon.acceptedBasePriceKeys : [];
+                                        const next = selected ? cur.filter(k => k !== pc.key) : [...cur, pc.key];
+                                        change({
+                                          acceptedBasePriceKeys: next,
+                                          baseOptionScopeMode: 'selected',
+                                          baseOptionScopeUnclear: false
+                                        });
+                                      }}
+                                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer transition-colors ${
+                                        selected
+                                          ? 'bg-teal-600 text-white border-teal-600'
+                                          : 'bg-white text-slate-700 border-slate-200 hover:border-teal-300'
+                                      }`}
+                                    >
+                                      {selected ? '✓ ' : ''}{pc.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className="flex flex-wrap items-center gap-4">
                         <Checkbox label="Complemento ativo para seleção" checked={addon.active !== false} onChange={active => change({ active })} />
@@ -1209,6 +1331,9 @@ export function StudioCatalogImportReview({ draft, onChange }: { draft: ImportDr
       a =>
         a.active &&
         (Boolean(a.mandatoryUnclear) ||
+          Boolean(a.baseOptionScopeUnclear) ||
+          a.baseOptionScopeMode === 'undecided' ||
+          (a.baseOptionScopeMode === 'selected' && (!Array.isArray(a.acceptedBasePriceKeys) || a.acceptedBasePriceKeys.length === 0)) ||
           a.additionalPriceCents === null ||
           (!a.addonServiceRef && !a.addonServiceName) ||
           (a.attendanceFormat === 'group' && (!a.sessionCapacity || a.sessionCapacity < 2)))

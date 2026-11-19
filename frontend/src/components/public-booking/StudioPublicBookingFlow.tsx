@@ -39,6 +39,8 @@ import {
   buildFallbackBaseCommercialOption,
   calculateCommercialOptionBreakdown,
   calculatePlanWithAddonsBreakdown,
+  isCommercialOptionNonScheduled,
+  isServiceNonScheduledForPublic,
   normalizeOptionalAddonsConfig,
   PLAN_CREDIT_MODE_LABELS,
   PlanCreditMode,
@@ -135,7 +137,7 @@ const PERIODICITY_LABELS: Record<string, string> = {
   installments: 'Parcelado'
 };
 
-function formatCommercialOptionSummary(opt: any): {
+function formatCommercialOptionSummary(opt: any, service?: any): {
   frequencyLabel: string;
   paymentLabel: string;
   durationLabel: string;
@@ -143,17 +145,27 @@ function formatCommercialOptionSummary(opt: any): {
   unitSuffix: string;
   secondaryDetail: string;
 } {
-  const accessType = opt?.accessType || 'unlimited';
+  const isFacilityAccess =
+    service?.studio_service_type === 'facility_access' ||
+    service?.studio_service_type === 'non_scheduled' ||
+    Number(service?.requires_appointment ?? 1) === 0;
+  const rawAccessType = opt?.accessType || (isFacilityAccess ? (opt?.frequencyType === 'unlimited' ? 'unlimited' : 'limited') : 'unlimited');
+  const accessType =
+    isFacilityAccess && rawAccessType === 'scheduled'
+      ? (opt?.frequencyType === 'unlimited' || !opt?.frequencyCount ? 'unlimited' : 'limited')
+      : rawAccessType;
   let frequencyLabel = 'Acesso livre';
-  if (accessType === 'limited') {
+  if (opt?.frequencyType === 'unlimited' || accessType === 'unlimited') {
+    frequencyLabel = 'Acesso livre';
+  } else if (accessType === 'limited' || isFacilityAccess) {
     if (opt?.frequencyType === 'monthly' && opt?.frequencyCount) {
       frequencyLabel = `${opt.frequencyCount}x por mês`;
     } else if (opt?.frequencyCount) {
       frequencyLabel = `${opt.frequencyCount}x por semana`;
     } else {
-      frequencyLabel = 'Frequência limitada';
+      frequencyLabel = 'Acesso limitado';
     }
-  } else if (opt?.accessType === 'scheduled') {
+  } else if (accessType === 'scheduled') {
     frequencyLabel = opt?.frequencyCount ? `${opt.frequencyCount}x por semana` : 'Horário marcado';
   }
   const period = String(opt?.paymentPeriodicity || 'monthly');
@@ -354,10 +366,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     [selectedService]
   );
   const isSelectedServiceNonScheduled = Boolean(
-    selectedService &&
-      (selectedService.studio_service_type === 'facility_access' ||
-        selectedService.studio_service_type === 'non_scheduled' ||
-        Number(selectedService.requires_appointment ?? 1) === 0)
+    selectedService && isServiceNonScheduledForPublic(selectedService)
   );
   const canUseSingleBooking = Boolean(
     !isSelectedServiceNonScheduled && (selectedServiceModes ? selectedServiceModes.allowPublicSingleBooking : true)
@@ -898,7 +907,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   const availableOptionalAddons = useMemo(() => {
     if (!optionalAddonsConfig.enabled) return [];
     return optionalAddonsConfig.options.filter(opt =>
-      addonAppliesToBaseOption(opt, selectedCommercialOption?.id || null)
+      addonAppliesToBaseOption(opt, selectedCommercialOption)
     );
   }, [optionalAddonsConfig, selectedCommercialOption]);
 
@@ -906,7 +915,18 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
     setSelectedAddonOptionIds(prev => {
       const validIds = new Set(availableOptionalAddons.map(a => a.id));
       const filtered = prev.filter(id => validIds.has(id));
-      return optionalAddonsConfig.allowMultiple ? filtered : filtered.slice(0, 1);
+      const nextIds = optionalAddonsConfig.allowMultiple ? filtered : filtered.slice(0, 1);
+      setAddonScheduleSelections(prevSched => {
+        const nextSet = new Set(nextIds);
+        const keys = Object.keys(prevSched);
+        if (keys.every(k => nextSet.has(k))) return prevSched;
+        const cleaned: Record<string, SelectedAddonSchedule[]> = {};
+        for (const k of keys) {
+          if (nextSet.has(k)) cleaned[k] = prevSched[k];
+        }
+        return cleaned;
+      });
+      return nextIds;
     });
   }, [selectedServiceId, selectedCommercialOption?.id, availableOptionalAddons, optionalAddonsConfig.allowMultiple]);
 
@@ -956,7 +976,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   }, [selectedService, selectedCommercialOption, selectedAddonOptions]);
 
   const isSelectedServiceAccessPlan = Boolean(
-    selectedService && isSelectedServiceNonScheduled
+    selectedService &&
+      (isSelectedServiceNonScheduled || isCommercialOptionNonScheduled(selectedService, selectedCommercialOption))
   );
 
   // Busca horários e grade semanal para Serviço / Plano agendável
@@ -1259,7 +1280,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
             }
           : isSelectedServiceAccessPlan
           ? (() => {
-              const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
+              const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption, selectedService) : null;
               const resolvedAmount = planWithAddonsBreakdown
                 ? planWithAddonsBreakdown.firstChargeDueCents / 100
                 : (optSummary
@@ -1467,6 +1488,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
           availableOptions={availableOptionalAddons}
           selectedIds={selectedAddonOptionIds}
           onChange={setSelectedAddonOptionIds}
+          baseServiceName={selectedService?.name || null}
         />
 
         {duringPurchaseScheduledAddons.length > 0 && (
@@ -1477,6 +1499,8 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 tenantSlug={slugVal}
                 bookingSequence={bookingSequence}
                 baseServiceId={selectedServiceId}
+                baseCommercialOptionId={selectedCommercialOption?.id || null}
+                timeZone={clinic?.timezone || 'America/Sao_Paulo'}
                 addon={addon}
                 targetServiceMeta={addonTargetMetaMap.get(addon.addonServiceId)}
                 values={addonScheduleSelections[addon.id] || []}
@@ -1693,10 +1717,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                       ? lowestOptPrice
                       : (Number(s.periodic_price) > 0 ? Number(s.periodic_price) : Number(s.price || 0));
                   const isDeliverable = s.studio_service_type === 'non_scheduled';
-                  const isNonSched =
-                    s.studio_service_type === 'facility_access' ||
-                    s.studio_service_type === 'non_scheduled' ||
-                    Number(s.requires_appointment ?? 1) === 0;
+                  const isNonSched = isServiceNonScheduledForPublic(s);
                   const acc = s.access_config;
                   const freqText = !isNonSched
                     ? (s.service_kind === 'group' ? 'Turma com reserva de horário' : 'Atendimento com horário marcado')
@@ -1941,7 +1962,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
       {/* ETAPA 3 (MODO PLANO SEM AGENDAMENTO): BENEFÍCIOS, DURAÇÃO, FREQUÊNCIA E CONDIÇÕES */}
       {step === 3 && (objective === 'plan' || objective === 'service') && isSelectedServiceAccessPlan && selectedService && (() => {
         const isDeliverable = selectedService.studio_service_type === 'non_scheduled';
-        const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
+        const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption, selectedService) : null;
         const durationCode = selectedCommercialOption?.contractDurationCode || recurrenceDurationCode || '1_month';
         const frequencyDisplay = optSummary
           ? optSummary.frequencyLabel
@@ -1978,7 +1999,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 <label className="block font-bold text-slate-800">Escolha a opção do plano *</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {activeCommercialOptions.map((opt: any) => {
-                    const summary = formatCommercialOptionSummary(opt);
+                    const summary = formatCommercialOptionSummary(opt, selectedService);
                     const isActive = (selectedCommercialOption?.id || '') === opt.id;
                     return (
                       <button
@@ -2193,7 +2214,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {activeCommercialOptions.map((opt: any) => {
-                  const summary = formatCommercialOptionSummary(opt);
+                  const summary = formatCommercialOptionSummary(opt, selectedService);
                   const isActive = (selectedCommercialOption?.id || '') === opt.id;
                   return (
                     <button
@@ -3245,7 +3266,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 )}
               </div>
             ) : selectedService && isSelectedServiceAccessPlan ? (() => {
-              const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption) : null;
+              const optSummary = selectedCommercialOption ? formatCommercialOptionSummary(selectedCommercialOption, selectedService) : null;
               const priceDisplay = optSummary
                 ? optSummary.cycleAmount
                 : (Number(selectedService.periodic_price) > 0 ? Number(selectedService.periodic_price) : Number(selectedService.price || 0));

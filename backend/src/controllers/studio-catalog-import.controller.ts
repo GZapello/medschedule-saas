@@ -4,6 +4,7 @@ import { db } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
 import { ErrorMonitor } from '../services/error-monitor.service';
 import { GeminiCatalogDiagnostic, GeminiService } from '../services/gemini.service';
+import { normalizeCommercialPriceOptions } from '../utils/studio-access-and-commercial';
 import {
   applyStudioCatalog,
   attachSuggestedProfessionals,
@@ -281,7 +282,19 @@ function responseFor(tenantId: string, draft: Draft) {
 
   const services = catalog.services.map(s => ({
     id: s.id, name: s.name, active: Boolean(s.active), type: s.studio_service_type, capacity: s.default_capacity,
-    professionalId: s.professional_id
+    professionalId: s.professional_id,
+    commercialOptions: normalizeCommercialPriceOptions(s.commercial_price_options_json, {
+      studioServiceType: s.studio_service_type
+    })
+      .filter(o => o.active)
+      .map(o => ({
+        id: o.id,
+        label: o.label || `${o.contractDurationCode} • ${o.accessType === 'unlimited' ? 'Acesso livre' : o.frequencyCount ? `${o.frequencyCount}x` : 'Plano'}`,
+        amountCents: o.amountCents,
+        duration: o.contractDurationCode,
+        frequencyType: o.frequencyType,
+        frequencyCount: o.frequencyCount
+      }))
   }));
   const packages = catalog.packages.map(p => ({ ...p, active: Boolean(p.active) }));
   return {

@@ -24,6 +24,7 @@ interface ReviewableRecord {
 }
 
 export interface ProposedPrice extends ProposalEvidence {
+  key?: string;
   label: string;
   amountCents: number | null;
   unit: typeof UNITS[number] | null;
@@ -69,6 +70,7 @@ export interface ProposedAddonOption extends ProposalEvidence {
   addonServiceRef: string;
   frequencyType: typeof FREQUENCIES[number] | null;
   frequencyCount: number | null;
+  creditMode?: typeof CREDIT_MODES[number] | null;
   creditsPerCycle: number | null;
   additionalPriceCents: number | null;
   comboDiscountType: 'none' | 'fixed_cents' | 'percentage';
@@ -81,6 +83,12 @@ export interface ProposedAddonOption extends ProposalEvidence {
   enabledProfessionalIds?: string[];
   professionalSelectionMode?: 'student_picks' | 'auto_assign';
   allowedWeekdays?: number[];
+  /** Chaves das opções comerciais (ProposedPrice.key ou 'existing-opt:<id>') autorizadas a exibir este complemento. */
+  acceptedBasePriceKeys?: string[];
+  /** 'selected' = somente nos planos marcados; 'all' = todos os planos; 'undecided' = pendente de escolha do gestor na revisão. */
+  baseOptionScopeMode?: 'all' | 'selected' | 'undecided';
+  /** True quando o material não especificou quais planos-base aceitam o complemento e o gestor precisa responder na revisão. */
+  baseOptionScopeUnclear?: boolean;
   allowPublicBooking?: boolean;
   mandatoryUnclear?: boolean;
   ambiguousReason?: string;

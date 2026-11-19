@@ -1031,6 +1031,38 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
       WHERE studio_service_type = 'non_scheduled'
         AND (clinical_module = 'ZemdaPersonal' OR COALESCE(requires_appointment, 1) != 0);
     `);
+
+    // 11b. Corrige opções comerciais legadas em serviços facility_access salvas com accessType='scheduled'
+    // Preserva todos os IDs estáveis, preços, durações e vínculos de complementos.
+    const dirtyFacilityRows = rawDb.prepare(`
+      SELECT id, commercial_price_options_json
+      FROM services
+      WHERE studio_service_type = 'facility_access'
+        AND commercial_price_options_json IS NOT NULL
+        AND commercial_price_options_json LIKE '%"scheduled"%'
+    `).all() as Array<{ id: string; commercial_price_options_json: string }>;
+
+    if (dirtyFacilityRows.length > 0) {
+      const updOptStmt = rawDb.prepare(`
+        UPDATE services SET commercial_price_options_json = ?, updated_at = datetime('now') WHERE id = ?
+      `);
+      for (const row of dirtyFacilityRows) {
+        try {
+          const parsed = JSON.parse(row.commercial_price_options_json);
+          if (!Array.isArray(parsed)) continue;
+          let changed = false;
+          const fixed = parsed.map((opt: any) => {
+            if (!opt || typeof opt !== 'object' || opt.accessType !== 'scheduled') return opt;
+            changed = true;
+            const nextAccessType = opt.frequencyType === 'unlimited' || !opt.frequencyType ? 'unlimited' : 'limited';
+            return { ...opt, accessType: nextAccessType };
+          });
+          if (changed) {
+            updOptStmt.run(JSON.stringify(fixed), row.id);
+          }
+        } catch (_) {}
+      }
+    }
   } catch (e) {
     console.warn('[StudioMigration] Aviso ao higienizar vínculos em serviços facility_access:', e);
   }

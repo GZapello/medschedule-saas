@@ -216,6 +216,9 @@ export function calculateAvailableSlots(
         ignoreLeadTime: options?.ignoreLeadTime,
         ignoreAdvanceCap: options?.ignoreAdvanceCap,
         publicOnly: false,
+        includePendingHolds: options?.includePendingHolds,
+        excludeHoldRequestId: options?.excludeHoldRequestId,
+        capacityOverride: options?.capacityOverride,
         mockNow
       });
       return scheduledSlots

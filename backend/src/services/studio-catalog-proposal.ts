@@ -23,8 +23,9 @@ REGRAS INEGOCIAVEIS DE FIDELIDADE:
    - VALOR EQUIVALENTE / AMBÍGUO: Se o plano for Trimestral/Semestral/Anual e o valor parecer mensal (ex.: "Trimestral R$ 185 (em até 3x no cartão)" sem dizer explicitamente "valor total"), defina isMonthlyEquivalent: true, guarde maxInstallments se citado (ex.: 3), e deixe unit: null ou paymentPeriod: null se não houver certeza absoluta se R$ 185 é por mês equivalente (total R$ 555) ou valor do ciclo/total — registre a dúvida em "issues" com a citação exata em "evidence"!
    - MENSALIDADE SEPARADA / COMPLEMENTOS OPCIONAIS ("optionalAddons[]"):
      * Se uma observação disser "mensalidade da academia cobrada à parte / separadamente", preserve essa condição em "notes" e NÃO some o valor da mensalidade ao outro serviço.
-     * Se o material oferecer um serviço principal/base (ex.: Musculação) com um complemento opcional contratado no mesmo fluxo (ex.: "Deseja adicionar Acompanhamento Personal?", "Personal 1x/semana por +R$ 180/mês", "Personal 2x/semana +R$ 320/mês", "Personal em pequeno grupo até 4 alunos", "Desconto combo de R$ 20", "Avaliação física avulsa"), registre essas ofertas em "optionalAddons[]" NO SERVIÇO BASE e extraia o serviço complementar como serviço próprio (ou permita vinculação ao catálogo existente), SEM criar serviços duplicados, SEM vincular Personal diretamente ao serviço-base de Musculação e SEM embutir o valor do complemento no plano-base.
-     * Para cada item em "optionalAddons[]", identifique quando explícito no material: attendanceFormat ("match_service" | "individual" | "duo" | "group"), sessionCapacity (ex.: 1 individual, 2 dupla, 4 pequeno grupo — null se não citado), allowedWeekdays (lista 0..6 ou [] se livre) e scheduleTiming ("during_purchase" se o aluno escolhe na contratação, "after_confirmation" se após aprovação, "not_applicable" se não agendável).
+     * Se o material oferecer um serviço principal/base (ex.: Musculação com planos mensal/trimestral/semestral/anual em acesso livre ou Xx/semana) e outro material/bloco oferecer um acompanhamento opcional (ex.: "Acompanhamento Personal — 1x/semana (4 aulas/mês) R$ 120/mês", "2x/semana (8 aulas/mês) R$ 220/mês", "Grupos de até 4 alunos", "Mensalidade da academia cobrada separadamente"), registre o serviço complementar como serviço próprio (ex.: "Acompanhamento Personal", type: "group", capacity: 4) E proponha as ofertas em "optionalAddons[]" NO SERVIÇO BASE, SEM criar serviços duplicados, SEM vincular Personal diretamente ao serviço-base de Musculação e SEM embutir o valor do complemento no plano-base.
+     * REGRA CRÍTICA DE ESCOPO POR OPÇÃO COMERCIAL: NUNCA assuma automaticamente que o complemento vale para todos os planos do serviço-base! Se os materiais NÃO especificarem exatamente em quais opções comerciais (ex.: apenas no Anual — Acesso livre) o complemento poderá ser contratado, defina "baseOptionScopeUnclear": true, "baseOptionScopeMode": "undecided", "acceptedBasePriceKeys": [] e registre em "issues": "Em quais planos este acompanhamento poderá ser contratado?".
+     * Para cada item em "optionalAddons[]", identifique quando explícito no material: attendanceFormat ("match_service" | "individual" | "duo" | "group"), sessionCapacity (ex.: 1 individual, 2 dupla, 4 pequeno grupo — null se não citado), creditMode ("fixed_credits" quando citar quantidade fixa de aulas/mês como "4 aulas/mês" ou "8 aulas/mês"; "weekly_guaranteed" quando garantir frequência semanal; null se não citado), creditsPerCycle (ex.: 4 ou 8), durationMode ("1_month" para complemento mensal independente, ou "match_base" somente quando vinculado à vigência do plano-base), allowedWeekdays (lista 0..6 ou [] se livre) e scheduleTiming ("during_purchase" se o aluno escolhe na contratação, "after_confirmation" se após aprovação, "not_applicable" se não agendável).
      * Se ficar ambíguo se o item extra é obrigatório (um pacote/combo único) ou opcional (um complemento selecionável), registre em "optionalAddons[]" com "mandatoryUnclear: true" e descreva a dúvida em "ambiguousReason" e "issues".
    - ADICIONAIS POR HORÁRIO: Taxas de horário de pico (ex.: "+R$ 10 das 18h às 21h") vão em "adjustments", nunca somadas em todos os preços. Se não estiver claro se é por aluno ou por sessão, deixe incidence: null e registre em issues.
 6. HORÁRIOS INCOMPLETOS E PROFISSIONAIS:
@@ -33,7 +34,7 @@ REGRAS INEGOCIAVEIS DE FIDELIDADE:
 7. PACOTES / COMBOS ("packages"):
    - Combinações vendidas em uma única contratação obrigatória (ex.: Avaliação + Treino Personalizado + 1h Personal + Vídeo). NÃO crie pacotes para simples variações de duração de um mesmo serviço, nem quando o segundo serviço é opcional (use optionalAddons).
    - Campos de serviço: {name, activity, description, notes, type: ${SERVICE_TYPES.join('|')}, modality: ${MODALITIES.join('|')}, durationMinutes, capacity, weeklyLimit, monthlyLimit, allowSingleBooking, allowPlanBooking, planCreditMode: "fixed_credits"|"weekly_guaranteed"|"unlimited"|null, professionalNames:[], prices:[], schedules:[], adjustments:[], optionalAddons:[], sources:[], issues:[]}.
-   - Campos de complemento opcional: {label, addonServiceName, frequencyType: ${FREQUENCIES.join('|')}|null, frequencyCount, creditsPerCycle, additionalPriceCents, comboDiscountType: "none"|"fixed_cents"|"percentage", comboDiscountValue, billingPeriodicity: "monthly"|"per_cycle"|"one_time"|"bimonthly"|"quarterly"|"semiannual"|"annual", durationMode: "match_base"|${DURATIONS.join('|')}, scheduleTiming: "during_purchase"|"after_confirmation"|"not_applicable", attendanceFormat: "match_service"|"individual"|"duo"|"group", sessionCapacity, allowedWeekdays:[], allowPublicBooking, mandatoryUnclear, ambiguousReason, evidence, sources:[]}.
+   - Campos de complemento opcional: {label, addonServiceName, frequencyType: ${FREQUENCIES.join('|')}|null, frequencyCount, creditMode: "fixed_credits"|"weekly_guaranteed"|"unlimited"|null, creditsPerCycle, additionalPriceCents, comboDiscountType: "none"|"fixed_cents"|"percentage", comboDiscountValue, billingPeriodicity: "monthly"|"per_cycle"|"one_time"|"bimonthly"|"quarterly"|"semiannual"|"annual", durationMode: "match_base"|${DURATIONS.join('|')}, scheduleTiming: "during_purchase"|"after_confirmation"|"not_applicable", attendanceFormat: "match_service"|"individual"|"duo"|"group", sessionCapacity, allowedWeekdays:[], acceptedBasePriceKeys:[], baseOptionScopeMode: "all"|"selected"|"undecided", baseOptionScopeUnclear, allowPublicBooking, mandatoryUnclear, ambiguousReason, evidence, sources:[]}.
    - Campos de preço: {label, amountCents (centavos inteiros BRL), unit: ${UNITS.join('|')}|null, paymentPeriod: ${PERIODS.join('|')}|null, duration: ${DURATIONS.join('|')}|null, frequencyType: ${FREQUENCIES.join('|')}|null, frequencyCount, creditMode: "fixed_credits"|"weekly_guaranteed"|"unlimited"|null, creditsPerCycle, installments, maxInstallments, participants, isMonthlyEquivalent, equivalentMonthlyCents, ambiguousReason, evidence, sources:[]}.
    - Campos de pacote: {name, description, notes, price, items:[{serviceName, includedCredits, weeklyFrequency, monthlyLimit, mandatory}], sources:[], issues:[]}.
    - Limites: 40 serviços, 20 pacotes, 30 preços ou horários por serviço.
@@ -180,8 +181,11 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
     allowPublicBooking: row.allowPublicBooking !== false
   });
   const evidence = (row: Raw) => ({ sources: sources(row.sources), evidence: str(row.evidence, 300) });
-  const price = (row: Raw): ProposedPrice => ({
-    ...evidence(row), label: str(row.label), amountCents: integer(row.amountCents, 1, 100_000_000),
+  const price = (row: Raw, idx = 0): ProposedPrice => ({
+    ...evidence(row),
+    key: str(row.key, 60) || `p${idx + 1}`,
+    label: str(row.label),
+    amountCents: integer(row.amountCents, 1, 100_000_000),
     unit: choice(row.unit, UNITS), paymentPeriod: choice(row.paymentPeriod, PERIODS),
     duration: choice(row.duration, DURATIONS), frequencyType: choice(row.frequencyType, FREQUENCIES),
     frequencyCount: integer(row.frequencyCount, 1, 200), installments: integer(row.installments, 2, 24),
@@ -232,15 +236,27 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
       const attendanceFormat = choice(a.attendanceFormat, ['individual', 'duo', 'group', 'match_service'] as const) || 'match_service';
       const parsedCap = integer(a.sessionCapacity, 1, 500);
       const sessionCapacity = attendanceFormat === 'individual' ? 1 : (attendanceFormat === 'duo' ? 2 : parsedCap);
+      const freqType = choice(a.frequencyType, FREQUENCIES) || 'weekly';
+      const creditsVal = integer(a.creditsPerCycle, 0, 500);
+      const creditMode =
+        choice(a.creditMode, CREDIT_MODES) ||
+        (freqType === 'unlimited' ? 'unlimited' : (creditsVal !== null ? 'fixed_credits' : null));
+      const acceptedBasePriceKeys = strings(a.acceptedBasePriceKeys, 30, 80);
+      const rawScopeMode = choice(a.baseOptionScopeMode, ['all', 'selected', 'undecided'] as const);
+      const baseOptionScopeUnclear = a.baseOptionScopeUnclear === true;
+      const baseOptionScopeMode: 'all' | 'selected' | 'undecided' =
+        rawScopeMode ||
+        (acceptedBasePriceKeys.length > 0 ? 'selected' : (baseOptionScopeUnclear ? 'undecided' : 'all'));
       return {
         ...evidence(a),
         id: str(a.id, 60) || undefined,
         label: str(a.label),
         addonServiceName: str(a.addonServiceName || a.label),
         addonServiceRef: extracted ? '' : str(a.addonServiceRef, 110),
-        frequencyType: choice(a.frequencyType, FREQUENCIES) || 'weekly',
+        frequencyType: freqType,
         frequencyCount: integer(a.frequencyCount, 1, 200),
-        creditsPerCycle: integer(a.creditsPerCycle, 0, 500),
+        creditMode,
+        creditsPerCycle: creditMode === 'weekly_guaranteed' || creditMode === 'unlimited' ? null : creditsVal,
         additionalPriceCents: integer(a.additionalPriceCents, 0, 100_000_000),
         comboDiscountType: choice(a.comboDiscountType, ['none', 'fixed_cents', 'percentage'] as const) || 'none',
         comboDiscountValue: integer(a.comboDiscountValue, 0, 100_000_000),
@@ -252,6 +268,9 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
         professionalSelectionMode: choice(a.professionalSelectionMode, ['student_picks', 'auto_assign'] as const) || 'student_picks',
         enabledProfessionalIds: extracted ? [] : list(a.enabledProfessionalIds, 50, id => str(id, 100)).filter(Boolean),
         allowedWeekdays: indexes(a.allowedWeekdays, 0, 6),
+        acceptedBasePriceKeys,
+        baseOptionScopeMode,
+        baseOptionScopeUnclear,
         allowPublicBooking: a.allowPublicBooking !== false,
         mandatoryUnclear: a.mandatoryUnclear === true,
         ambiguousReason: str(a.ambiguousReason, 300),
@@ -325,7 +344,14 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
   const mergedServices: ProposedService[] = [];
   for (const groupList of buckets.values()) {
     for (const row of groupList) {
-      row.prices = mergeEvidence(row.prices, p => priceConditionKey(p) + '|' + (p.amountCents ?? p.evidence)).slice(0, 30);
+      row.prices = mergeEvidence(row.prices, p => priceConditionKey(p) + '|' + (p.amountCents ?? p.evidence))
+        .slice(0, 30)
+        .map((p, idx) => ({ ...p, key: p.key || `p${idx + 1}` }));
+      // Garante que serviços de acesso livre/limitado (Musculação) nunca herdem agenda profissional ou nomes de personal
+      if (row.type === 'access_unlimited' || row.type === 'access_limited') {
+        row.schedules = [];
+        row.professionalNames = [];
+      }
       row.prices.forEach(p => {
         const amb = analyzeFinancialAmbiguity(p);
         if (amb && !p.ambiguousReason) p.ambiguousReason = amb;
@@ -347,6 +373,20 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
           a.additionalPriceCents ?? a.evidence
         ])
       ).slice(0, 20);
+      // Nunca vincular automaticamente um complemento a TODOS os planos quando o serviço-base possui múltiplas opções comerciais e o material não especificou quais aceitam
+      const planPricesCount = row.prices.filter(p => !(p.unit === 'per_session' && !p.duration && !p.frequencyType)).length;
+      if (planPricesCount > 1 && row.optionalAddons.length > 0) {
+        row.optionalAddons = row.optionalAddons.map(a => {
+          const hasExplicitKeys = Array.isArray(a.acceptedBasePriceKeys) && a.acceptedBasePriceKeys.length > 0;
+          if (!hasExplicitKeys && a.baseOptionScopeMode !== 'all') {
+            return { ...a, baseOptionScopeMode: 'undecided' as const, baseOptionScopeUnclear: true };
+          }
+          if (!hasExplicitKeys && a.baseOptionScopeUnclear !== false) {
+            return { ...a, baseOptionScopeMode: 'undecided' as const, baseOptionScopeUnclear: true };
+          }
+          return a;
+        });
+      }
       row.sources = [...new Set([
         ...row.sources,
         ...[...row.prices, ...row.schedules, ...row.adjustments, ...(row.optionalAddons || [])].flatMap(item => item.sources)
@@ -370,11 +410,71 @@ export function normalizeProposal(value: unknown, sourceCount: number, extracted
       if ((row.optionalAddons || []).some(a => a.mandatoryUnclear || a.additionalPriceCents === null)) {
         row.issues.push('Um complemento opcional exige confirmar se é opcional/obrigatório e seu valor.');
       }
+      if ((row.optionalAddons || []).some(a => a.baseOptionScopeUnclear || a.baseOptionScopeMode === 'undecided')) {
+        row.issues.push('Em quais planos este acompanhamento poderá ser contratado?');
+      }
       if ((row.optionalAddons || []).some(a => a.attendanceFormat === 'group' && (!a.sessionCapacity || a.sessionCapacity < 2))) {
         row.issues.push('Um complemento em grupo exige confirmar a capacidade de alunos por horário (mínimo 2).');
       }
       row.issues = [...new Set(row.issues)];
       mergedServices.push(row);
+    }
+  }
+
+  // Reconciliação entre imagens: se houver 1 serviço de academia (access_unlimited/access_limited) e outro de acompanhamento com menção à mensalidade da academia cobrada separadamente, propor vinculação condicional SEM assumir todos os planos
+  const gymBaseCandidates = mergedServices.filter(s => s.type === 'access_unlimited' || s.type === 'access_limited');
+  if (gymBaseCandidates.length === 1) {
+    const gymBase = gymBaseCandidates[0];
+    const gymPlanPricesCount = gymBase.prices.filter(p => !(p.unit === 'per_session' && !p.duration && !p.frequencyType)).length;
+    for (const other of mergedServices) {
+      if (other === gymBase) continue;
+      const combinedText = nameKey(`${other.name} ${other.description} ${other.notes} ${other.prices.map(p => p.evidence).join(' ')}`);
+      const mentionsSeparateGymFee =
+        (combinedText.includes('mensalidade') && (combinedText.includes('academia') || combinedText.includes('aparte') || combinedText.includes('parte') || combinedText.includes('separad'))) ||
+        (combinedText.includes('acompanhamento') && combinedText.includes('personal'));
+      if (!mentionsSeparateGymFee || other.prices.length === 0) continue;
+
+      const existingTargetNames = new Set((gymBase.optionalAddons || []).map(a => nameKey(a.addonServiceName || a.label)));
+      if (existingTargetNames.has(nameKey(other.name))) continue;
+
+      const proposedFromOther = other.prices
+        .filter(p => p.amountCents && p.amountCents > 0)
+        .map((p, idx) => ({
+          sources: [...new Set([...other.sources, ...p.sources])].sort((a, b) => a - b),
+          evidence: p.evidence || other.notes || `${other.name} — ${p.label}`,
+          label: p.label ? `${other.name} — ${p.label}` : `${other.name}${p.frequencyCount ? ` ${p.frequencyCount}x/sem` : ''}`,
+          addonServiceName: other.name,
+          addonServiceRef: '',
+          frequencyType: p.frequencyType || 'weekly',
+          frequencyCount: p.frequencyCount ?? (idx === 0 ? 1 : 2),
+          creditMode: p.creditMode || (p.creditsPerCycle ? 'fixed_credits' : null),
+          creditsPerCycle: p.creditsPerCycle ?? null,
+          additionalPriceCents: p.amountCents,
+          comboDiscountType: 'none' as const,
+          comboDiscountValue: 0,
+          billingPeriodicity: (p.paymentPeriod === 'monthly' || p.paymentPeriod === 'quarterly' || p.paymentPeriod === 'semiannual' || p.paymentPeriod === 'annual' || p.paymentPeriod === 'bimonthly' || p.paymentPeriod === 'one_time' ? p.paymentPeriod : 'monthly') as any,
+          durationMode: (p.duration && DURATIONS.includes(p.duration) ? p.duration : '1_month') as any,
+          scheduleTiming: 'during_purchase' as const,
+          attendanceFormat: (other.type === 'group' ? 'group' : other.type === 'duo' ? 'duo' : other.type === 'individual' ? 'individual' : 'match_service') as any,
+          sessionCapacity: other.capacity ?? null,
+          professionalSelectionMode: 'student_picks' as const,
+          enabledProfessionalIds: [] as string[],
+          allowedWeekdays: [] as number[],
+          acceptedBasePriceKeys: [] as string[],
+          baseOptionScopeMode: (gymPlanPricesCount > 1 ? 'undecided' : 'all') as 'undecided' | 'all',
+          baseOptionScopeUnclear: gymPlanPricesCount > 1,
+          allowPublicBooking: true,
+          mandatoryUnclear: false,
+          ambiguousReason: gymPlanPricesCount > 1 ? 'Em quais planos este acompanhamento poderá ser contratado?' : '',
+          active: true
+        }));
+
+      if (proposedFromOther.length > 0) {
+        gymBase.optionalAddons = [...(gymBase.optionalAddons || []), ...proposedFromOther].slice(0, 20);
+        if (gymPlanPricesCount > 1) {
+          gymBase.issues = [...new Set([...gymBase.issues, 'Em quais planos este acompanhamento poderá ser contratado?'])];
+        }
+      }
     }
   }
 

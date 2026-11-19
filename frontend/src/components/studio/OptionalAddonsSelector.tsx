@@ -6,12 +6,14 @@ import {
   StudioOptionalAddonOption,
   StudioOptionalAddonsConfig
 } from '../../utils/studioAccessAndCommercial';
+import { PLAN_DURATION_LABELS, PlanDurationCode } from '../../utils/establishmentContext';
 
 interface OptionalAddonsSelectorProps {
   config: StudioOptionalAddonsConfig;
   availableOptions: StudioOptionalAddonOption[];
   selectedIds: string[];
   onChange: (nextIds: string[]) => void;
+  baseServiceName?: string | null;
   compact?: boolean;
 }
 
@@ -26,6 +28,7 @@ export const OptionalAddonsSelector: React.FC<OptionalAddonsSelectorProps> = ({
   availableOptions,
   selectedIds,
   onChange,
+  baseServiceName,
   compact = false
 }) => {
   if (!config.enabled || availableOptions.length === 0) {
@@ -86,7 +89,11 @@ export const OptionalAddonsSelector: React.FC<OptionalAddonsSelectorProps> = ({
               {selectedIds.length === 0 && <Check className="w-2.5 h-2.5" />}
             </span>
             <span className="text-xs font-bold text-slate-800">
-              {config.noAddonLabel || 'Não adicionar'}
+              {config.noAddonLabel && config.noAddonLabel !== 'Não adicionar'
+                ? config.noAddonLabel
+                : baseServiceName
+                  ? `Não, somente ${baseServiceName}`
+                  : 'Não adicionar'}
             </span>
           </div>
           <span className="text-[11px] font-semibold text-slate-500">Somente plano-base</span>
@@ -141,10 +148,18 @@ export const OptionalAddonsSelector: React.FC<OptionalAddonsSelectorProps> = ({
                     {opt.attendanceFormat === 'group' && opt.sessionCapacity && (
                       <span>• Pequeno grupo (até {opt.sessionCapacity} alunos)</span>
                     )}
-                    {opt.creditsPerCycle !== null && opt.creditsPerCycle > 0 && (
-                      <span>• {opt.creditsPerCycle} aula(s) por ciclo</span>
+                    {opt.frequencyType === 'weekly' && opt.frequencyCount && (
+                      <span>• {opt.frequencyCount}x por semana</span>
                     )}
+                    {opt.creditMode === 'weekly_guaranteed' ? (
+                      <span>• Frequência semanal garantida</span>
+                    ) : opt.creditsPerCycle !== null && opt.creditsPerCycle > 0 ? (
+                      <span>• {opt.creditsPerCycle} aula(s)/ciclo (créditos fixos)</span>
+                    ) : null}
                     {opt.frequencyType === 'unlimited' && <span>• Frequência ilimitada</span>}
+                    {opt.durationMode && opt.durationMode !== 'match_base' && (
+                      <span>• Duração: {PLAN_DURATION_LABELS[opt.durationMode as PlanDurationCode] || opt.durationMode} (independente)</span>
+                    )}
                   </div>
                   <div className="text-[10px] text-slate-500">
                     {ADDON_SCHEDULE_TIMING_LABELS[opt.scheduleTiming] || ''}

@@ -12,6 +12,7 @@ export interface ProposalEvidence {
 }
 
 export interface ProposedPrice extends ProposalEvidence {
+  key?: string;
   label: string;
   amountCents: number | null;
   unit: typeof UNITS[number] | null;
@@ -57,6 +58,7 @@ export interface ProposedAddonOption extends ProposalEvidence {
   addonServiceRef: string;
   frequencyType: typeof FREQUENCIES[number] | null;
   frequencyCount: number | null;
+  creditMode?: typeof CREDIT_MODES[number] | null;
   creditsPerCycle: number | null;
   additionalPriceCents: number | null;
   comboDiscountType: 'none' | 'fixed_cents' | 'percentage';
@@ -69,6 +71,9 @@ export interface ProposedAddonOption extends ProposalEvidence {
   enabledProfessionalIds?: string[];
   professionalSelectionMode?: 'student_picks' | 'auto_assign';
   allowedWeekdays?: number[];
+  acceptedBasePriceKeys?: string[];
+  baseOptionScopeMode?: 'all' | 'selected' | 'undecided';
+  baseOptionScopeUnclear?: boolean;
   allowPublicBooking?: boolean;
   mandatoryUnclear?: boolean;
   ambiguousReason?: string;
@@ -161,6 +166,14 @@ export interface CatalogRecord {
   type?: string;
   capacity?: number | null;
   professionalId?: string | null;
+  commercialOptions?: Array<{
+    id: string;
+    label: string;
+    amountCents: number;
+    duration?: string;
+    frequencyType?: string;
+    frequencyCount?: number | null;
+  }>;
   score?: number;
   matchReason?: string;
 }

@@ -214,6 +214,8 @@ export interface StudioCommercialPriceOption {
   creditMode?: PlanCreditMode | null;
   creditsPerCycle?: number | null;
   allowPublicBooking?: boolean;
+  /** Controle explícito por opção comercial: true = permite complementos vinculados; false = bloqueia complementos neste plano; undefined = legado. */
+  allowOptionalAddons?: boolean;
 }
 
 export interface CommercialOptionBreakdown {
@@ -280,7 +282,10 @@ export function getPaymentPeriodicityCycleMonths(periodicity: PaymentPeriodicity
   }
 }
 
-export function normalizeCommercialPriceOptions(raw: unknown): StudioCommercialPriceOption[] {
+export function normalizeCommercialPriceOptions(
+  raw: unknown,
+  opts?: { studioServiceType?: StudioServiceType | string | null; requiresAppointment?: boolean | number | null }
+): StudioCommercialPriceOption[] {
   if (!raw) return [];
   let list: any[] = [];
   if (Array.isArray(raw)) {
@@ -294,6 +299,13 @@ export function normalizeCommercialPriceOptions(raw: unknown): StudioCommercialP
     }
   }
 
+  const stType = String(opts?.studioServiceType || '').trim().toLowerCase();
+  const isNonScheduledService =
+    stType === 'facility_access' ||
+    stType === 'non_scheduled' ||
+    opts?.requiresAppointment === 0 ||
+    opts?.requiresAppointment === false;
+
   const out: StudioCommercialPriceOption[] = [];
   for (let i = 0; i < list.length; i++) {
     const item = list[i];
@@ -305,15 +317,48 @@ export function normalizeCommercialPriceOptions(raw: unknown): StudioCommercialP
     );
     if (!Number.isSafeInteger(amountCents) || amountCents <= 0) continue;
 
-    const accessType: 'scheduled' | 'unlimited' | 'limited' =
-      item.accessType === 'unlimited' || item.accessType === 'limited'
-        ? item.accessType
-        : 'scheduled';
+    const rawFreqType = String(item.frequencyType || '').trim();
+    const rawLabelNorm = String(item.label || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    const labelIndicatesUnlimitedAccess =
+      (rawLabelNorm.includes('acesso livre') || rawLabelNorm.includes('uso livre') || rawLabelNorm.includes('livre')) &&
+      !rawLabelNorm.includes('horario marcado') &&
+      !rawLabelNorm.includes('agendad');
+
+    let accessType: 'scheduled' | 'unlimited' | 'limited';
+    if (isNonScheduledService) {
+      if (item.accessType === 'unlimited' || rawFreqType === 'unlimited') {
+        accessType = 'unlimited';
+      } else if (
+        item.accessType === 'limited' ||
+        rawFreqType === 'weekly' ||
+        rawFreqType === 'monthly' ||
+        rawFreqType === 'fixed_count'
+      ) {
+        accessType = 'limited';
+      } else {
+        accessType = 'unlimited';
+      }
+    } else if (item.accessType === 'unlimited' || item.accessType === 'limited') {
+      accessType = item.accessType;
+    } else if (rawFreqType === 'unlimited' || labelIndicatesUnlimitedAccess) {
+      accessType = 'unlimited';
+    } else {
+      accessType = 'scheduled';
+    }
 
     const frequencyType: CommercialFrequencyType =
-      item.frequencyType === 'monthly' || item.frequencyType === 'unlimited' || item.frequencyType === 'fixed_count'
-        ? item.frequencyType
+      rawFreqType === 'monthly' || rawFreqType === 'unlimited' || rawFreqType === 'fixed_count' || rawFreqType === 'weekly'
+        ? (rawFreqType as CommercialFrequencyType)
         : (accessType === 'unlimited' ? 'unlimited' : 'weekly');
+
+    if (frequencyType === 'unlimited' && accessType !== 'unlimited') {
+      accessType = 'unlimited';
+    } else if (isNonScheduledService && frequencyType !== 'unlimited' && accessType === 'unlimited') {
+      accessType = 'limited';
+    }
 
     const freqNum = Number(item.frequencyCount);
     const frequencyCount =
@@ -355,6 +400,15 @@ export function normalizeCommercialPriceOptions(raw: unknown): StudioCommercialP
       ? null
       : (Number.isInteger(parsedCredits) && parsedCredits > 0 ? Math.min(5000, parsedCredits) : null);
 
+    const allowOptionalAddons =
+      typeof item.allowOptionalAddons === 'boolean'
+        ? item.allowOptionalAddons
+        : item.allowOptionalAddons === 1
+          ? true
+          : item.allowOptionalAddons === 0
+            ? false
+            : undefined;
+
     out.push({
       id: String(item.id || `opt-${i + 1}`),
       label: item.label ? String(item.label).trim() : null,
@@ -374,11 +428,45 @@ export function normalizeCommercialPriceOptions(raw: unknown): StudioCommercialP
       active: item.active !== false && item.active !== 0,
       creditMode,
       creditsPerCycle,
-      allowPublicBooking: item.allowPublicBooking !== false && item.allowPublicBooking !== 0
+      allowPublicBooking: item.allowPublicBooking !== false && item.allowPublicBooking !== 0,
+      ...(allowOptionalAddons !== undefined ? { allowOptionalAddons } : {})
     });
   }
 
   return out;
+}
+
+export function isCommercialOptionNonScheduled(
+  service: { studio_service_type?: string | null; requires_appointment?: number | boolean | null } | null | undefined,
+  option?: Pick<StudioCommercialPriceOption, 'accessType' | 'frequencyType'> | null
+): boolean {
+  if (service) {
+    const stType = String(service.studio_service_type || '').trim().toLowerCase();
+    if (stType === 'facility_access' || stType === 'non_scheduled') return true;
+    if (service.requires_appointment === 0 || service.requires_appointment === false) return true;
+  }
+  if (option && (option.accessType === 'unlimited' || option.accessType === 'limited')) {
+    return true;
+  }
+  return false;
+}
+
+export function isServiceNonScheduledForPublic(
+  service: {
+    studio_service_type?: string | null;
+    requires_appointment?: number | boolean | null;
+    commercial_price_options?: Array<Pick<StudioCommercialPriceOption, 'accessType' | 'active'>> | null;
+  } | null | undefined
+): boolean {
+  if (!service) return false;
+  if (isCommercialOptionNonScheduled(service, null)) return true;
+  const activeOpts = Array.isArray(service.commercial_price_options)
+    ? service.commercial_price_options.filter((o) => o && o.active !== false)
+    : [];
+  if (activeOpts.length > 0 && activeOpts.every((o) => o.accessType === 'unlimited' || o.accessType === 'limited')) {
+    return true;
+  }
+  return false;
 }
 
 export function normalizePlanCreditMode(
@@ -818,8 +906,10 @@ export interface StudioOptionalAddonOption {
   active: boolean;
   /** Permite ocultar um complemento ativo apenas do link público. */
   allowPublicBooking?: boolean;
-  /** Lista vazia = válido para qualquer plano-base ativo do serviço; preenchida = restrito aos IDs de commercialPriceOptions listados. */
+  /** Lista vazia com baseOptionRestrictionMode='all' = válido para planos-base que aceitarem complementos; 'selected' = restrito estritamente aos IDs em acceptedBaseOptionIds. */
   acceptedBaseOptionIds: string[];
+  /** 'selected' impede vazamento para todos os planos quando uma opção comercial vinculada é removida. */
+  baseOptionRestrictionMode?: 'all' | 'selected';
   /** Profissionais habilitados para este complemento (vazio = qualquer profissional ativo vinculado ao serviço-alvo). */
   enabledProfessionalIds?: string[];
   professionalSelectionMode?: AddonProfessionalSelectionMode;
@@ -830,6 +920,8 @@ export interface StudioOptionalAddonOption {
   studentCanChooseSchedule?: boolean;
   frequencyType: CommercialFrequencyType;
   frequencyCount: number | null;
+  /** Regra explícita de consumo do complemento: 'fixed_credits' (ex.: 4 aulas/mês) ou 'weekly_guaranteed' (ex.: 1x/sem garantida) ou 'unlimited'. */
+  creditMode?: PlanCreditMode | null;
   creditsPerCycle: number | null;
   additionalPriceCents: number;
   comboDiscountType: AddonComboDiscountType;
@@ -945,9 +1037,19 @@ export function normalizeOptionalAddonsConfig(raw: any): StudioOptionalAddonsCon
         ? (item.billingPeriodicity as AddonBillingPeriodicity)
         : 'monthly';
 
-    const rawCredits = item.creditsPerCycle !== undefined && item.creditsPerCycle !== null ? Number(item.creditsPerCycle) : NaN;
-    const creditsPerCycle =
+    const rawCreditMode = String(item.creditMode ?? item.credit_mode ?? '').trim();
+    const creditMode: PlanCreditMode =
       frequencyType === 'unlimited'
+        ? 'unlimited'
+        : rawCreditMode === 'weekly_guaranteed' || rawCreditMode === 'fixed_credits' || rawCreditMode === 'unlimited'
+          ? (rawCreditMode as PlanCreditMode)
+          : 'fixed_credits';
+
+    const rawCredits = item.creditsPerCycle !== undefined && item.creditsPerCycle !== null && String(item.creditsPerCycle).trim() !== ''
+      ? Number(item.creditsPerCycle)
+      : NaN;
+    const creditsPerCycle =
+      frequencyType === 'unlimited' || creditMode === 'unlimited' || creditMode === 'weekly_guaranteed'
         ? null
         : (Number.isInteger(rawCredits) && rawCredits >= 0
             ? Math.min(500, rawCredits)
@@ -991,6 +1093,13 @@ export function normalizeOptionalAddonsConfig(raw: any): StudioOptionalAddonsCon
     const acceptedBaseOptionIds = Array.isArray(item.acceptedBaseOptionIds)
       ? Array.from(new Set<string>(item.acceptedBaseOptionIds.map((v: any) => String(v || '').trim()).filter(Boolean)))
       : [];
+    const rawRestrict = String(item.baseOptionRestrictionMode || '').trim();
+    const baseOptionRestrictionMode: 'all' | 'selected' =
+      rawRestrict === 'selected'
+        ? 'selected'
+        : rawRestrict === 'all' && acceptedBaseOptionIds.length === 0
+          ? 'all'
+          : (acceptedBaseOptionIds.length > 0 ? 'selected' : 'all');
 
     const enabledProfessionalIds = Array.isArray(item.enabledProfessionalIds)
       ? Array.from(new Set<string>(item.enabledProfessionalIds.map((v: any) => String(v || '').trim()).filter(Boolean)))
@@ -1049,6 +1158,7 @@ export function normalizeOptionalAddonsConfig(raw: any): StudioOptionalAddonsCon
       active: item.active !== false && item.active !== 0,
       allowPublicBooking,
       acceptedBaseOptionIds,
+      baseOptionRestrictionMode,
       enabledProfessionalIds,
       professionalSelectionMode,
       attendanceFormat,
@@ -1057,6 +1167,7 @@ export function normalizeOptionalAddonsConfig(raw: any): StudioOptionalAddonsCon
       studentCanChooseSchedule,
       frequencyType,
       frequencyCount,
+      creditMode,
       creditsPerCycle,
       additionalPriceCents,
       comboDiscountType,
@@ -1083,15 +1194,85 @@ export function normalizeOptionalAddonsConfig(raw: any): StudioOptionalAddonsCon
 }
 
 export function addonAppliesToBaseOption(
-  addon: StudioOptionalAddonOption,
-  baseOptionId?: string | null
+  addon: Pick<StudioOptionalAddonOption, 'active' | 'acceptedBaseOptionIds' | 'baseOptionRestrictionMode'>,
+  baseOptionOrId?: Pick<StudioCommercialPriceOption, 'id' | 'allowOptionalAddons'> | string | null
 ): boolean {
   if (!addon.active) return false;
-  if (!Array.isArray(addon.acceptedBaseOptionIds) || addon.acceptedBaseOptionIds.length === 0) {
-    return true;
+  if (typeof baseOptionOrId === 'object' && baseOptionOrId !== null && baseOptionOrId.allowOptionalAddons === false) {
+    return false;
   }
-  if (!baseOptionId) return true;
-  return addon.acceptedBaseOptionIds.includes(baseOptionId);
+  const baseOptionId =
+    typeof baseOptionOrId === 'string'
+      ? baseOptionOrId.trim() || null
+      : (baseOptionOrId?.id ? String(baseOptionOrId.id).trim() : null);
+
+  const accepted = Array.isArray(addon.acceptedBaseOptionIds)
+    ? addon.acceptedBaseOptionIds.map((id) => String(id || '').trim()).filter(Boolean)
+    : [];
+  const restrictionMode: 'all' | 'selected' =
+    addon.baseOptionRestrictionMode === 'selected'
+      ? 'selected'
+      : addon.baseOptionRestrictionMode === 'all' && accepted.length === 0
+        ? 'all'
+        : (accepted.length > 0 ? 'selected' : 'all');
+
+  if (restrictionMode === 'selected') {
+    if (!baseOptionId) return false;
+    return accepted.includes(baseOptionId);
+  }
+  return true;
+}
+
+export function reconcileCommercialOptionsAndAddons(
+  commercialOptions: StudioCommercialPriceOption[],
+  optionalAddons: StudioOptionalAddonsConfig | null
+): { commercialOptions: StudioCommercialPriceOption[]; optionalAddons: StudioOptionalAddonsConfig | null } {
+  if (!optionalAddons) {
+    return { commercialOptions, optionalAddons };
+  }
+  const validIds = new Set(commercialOptions.map((o) => o.id));
+  const blockedIds = new Set(commercialOptions.filter((o) => o.allowOptionalAddons === false).map((o) => o.id));
+  const hasExplicitOptionFlags = commercialOptions.some((o) => typeof o.allowOptionalAddons === 'boolean');
+  const explicitlyAllowedIds = commercialOptions.filter((o) => o.allowOptionalAddons === true).map((o) => o.id);
+
+  const nextOptions = optionalAddons.options.map((addon) => {
+    const rawAccepted = Array.isArray(addon.acceptedBaseOptionIds)
+      ? addon.acceptedBaseOptionIds.map((id) => String(id || '').trim()).filter(Boolean)
+      : [];
+    const wasRestricted = addon.baseOptionRestrictionMode === 'selected' || rawAccepted.length > 0;
+    const pruned =
+      commercialOptions.length > 0
+        ? rawAccepted.filter((id) => validIds.has(id) && !blockedIds.has(id))
+        : rawAccepted;
+
+    if (wasRestricted) {
+      return {
+        ...addon,
+        acceptedBaseOptionIds: pruned,
+        baseOptionRestrictionMode: 'selected' as const
+      };
+    }
+    if (hasExplicitOptionFlags && blockedIds.size > 0 && explicitlyAllowedIds.length > 0) {
+      return {
+        ...addon,
+        acceptedBaseOptionIds: explicitlyAllowedIds,
+        baseOptionRestrictionMode: 'selected' as const
+      };
+    }
+    return {
+      ...addon,
+      acceptedBaseOptionIds: pruned,
+      baseOptionRestrictionMode: 'all' as const
+    };
+  });
+
+  return {
+    commercialOptions,
+    optionalAddons: {
+      ...optionalAddons,
+      options: nextOptions
+    }
+  };
 }
 
 export interface AddonItemFinancialBreakdown {
@@ -1106,6 +1287,7 @@ export interface AddonItemFinancialBreakdown {
   allowedWeekdays: number[];
   frequencyType: CommercialFrequencyType;
   frequencyCount: number | null;
+  creditMode: PlanCreditMode;
   creditsPerCycle: number | null;
   totalCreditsInDuration: number | null;
   scheduleTiming: AddonScheduleTiming;
@@ -1113,6 +1295,8 @@ export interface AddonItemFinancialBreakdown {
   effectivePeriodicity: PaymentPeriodicityCode;
   effectivePeriodicityLabel: string;
   effectiveCycleMonths: number;
+  durationMode: AddonDurationMode;
+  isIndependentDuration: boolean;
   durationMonths: number;
   billingCyclesCount: number;
   autoRenew: boolean;
@@ -1216,8 +1400,15 @@ export function calculateAddonItemBreakdown(
   const alignedWithBaseCycle =
     baseIsRecurringCycle && effectivePeriodicity === baseBreakdown.paymentPeriodicity;
 
-  const resolvedCreditsPerCycle =
+  const resolvedCreditMode: PlanCreditMode =
     addon.frequencyType === 'unlimited'
+      ? 'unlimited'
+      : addon.creditMode === 'weekly_guaranteed' || addon.creditMode === 'fixed_credits' || addon.creditMode === 'unlimited'
+        ? addon.creditMode
+        : 'fixed_credits';
+
+  const resolvedCreditsPerCycle =
+    addon.frequencyType === 'unlimited' || resolvedCreditMode === 'unlimited' || resolvedCreditMode === 'weekly_guaranteed'
       ? null
       : (addon.creditsPerCycle !== null && addon.creditsPerCycle !== undefined && addon.creditsPerCycle >= 0
           ? addon.creditsPerCycle
@@ -1246,6 +1437,7 @@ export function calculateAddonItemBreakdown(
     allowedWeekdays: Array.isArray(addon.allowedWeekdays) ? addon.allowedWeekdays : [],
     frequencyType: addon.frequencyType,
     frequencyCount: addon.frequencyCount,
+    creditMode: resolvedCreditMode,
     creditsPerCycle: resolvedCreditsPerCycle,
     totalCreditsInDuration,
     scheduleTiming: addon.scheduleTiming,
@@ -1253,6 +1445,8 @@ export function calculateAddonItemBreakdown(
     effectivePeriodicity,
     effectivePeriodicityLabel: PAYMENT_PERIODICITY_LABELS[effectivePeriodicity] || effectivePeriodicity,
     effectiveCycleMonths,
+    durationMode: addon.durationMode,
+    isIndependentDuration: addon.durationMode !== 'match_base',
     durationMonths,
     billingCyclesCount,
     autoRenew: addon.autoRenew !== null && addon.autoRenew !== undefined ? Boolean(addon.autoRenew) : Boolean(baseAutoRenew),

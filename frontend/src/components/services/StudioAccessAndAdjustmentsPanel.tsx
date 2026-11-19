@@ -29,6 +29,7 @@ import {
   calculateCommercialOptionBreakdown,
   ADDON_BILLING_PERIODICITY_LABELS,
   ADDON_SCHEDULE_TIMING_LABELS,
+  addonAppliesToBaseOption,
   getDefaultOptionalAddonsConfig,
   resolveDefaultAddonCreditsPerCycle
 } from '../../utils/studioAccessAndCommercial';
@@ -292,7 +293,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
     onOptionalAddonsChange({ ...effectiveOptionalAddons, ...patch });
   };
 
-  const addOptionalAddonOption = () => {
+  const addOptionalAddonOption = (prelinkedBaseOptionId?: string) => {
     if (!onOptionalAddonsChange) return;
     const defaultTarget = candidateAddonServices.find(s => s.requires_appointment !== 0) || candidateAddonServices[0] || null;
     const defaultReqAppt =
@@ -303,6 +304,14 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
         defaultTarget.requires_appointment === false)
         ? false
         : true;
+    const explicitAllowedIds = commercialPriceOptions
+      .filter(co => co.active !== false && co.allowOptionalAddons === true)
+      .map(co => co.id);
+    const initialAcceptedBaseIds = prelinkedBaseOptionId
+      ? [prelinkedBaseOptionId]
+      : explicitAllowedIds;
+    const restrictToSelected = Boolean(prelinkedBaseOptionId) || commercialPriceOptions.length > 1 || explicitAllowedIds.length > 0;
+
     const nextOption: StudioOptionalAddonOption = {
       id: `addon-${Date.now()}-${effectiveOptionalAddons.options.length + 1}`,
       addonServiceId: defaultTarget?.id || '',
@@ -311,7 +320,8 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
       description: null,
       active: true,
       allowPublicBooking: true,
-      acceptedBaseOptionIds: [],
+      acceptedBaseOptionIds: initialAcceptedBaseIds,
+      baseOptionRestrictionMode: restrictToSelected ? 'selected' : 'all',
       enabledProfessionalIds: [],
       professionalSelectionMode: 'student_picks',
       attendanceFormat: 'match_service',
@@ -320,22 +330,122 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
       studentCanChooseSchedule: false,
       frequencyType: defaultReqAppt ? 'weekly' : 'unlimited',
       frequencyCount: defaultReqAppt ? 1 : null,
+      creditMode: defaultReqAppt ? 'fixed_credits' : 'unlimited',
       creditsPerCycle: defaultReqAppt ? 4 : null,
       additionalPriceCents: 0,
       comboDiscountType: 'none',
       comboDiscountValue: 0,
       billingPeriodicity: 'monthly',
-      durationMode: 'match_base',
+      durationMode: '1_month',
       autoRenew: null,
-      scheduleTiming: defaultReqAppt ? 'after_confirmation' : 'not_applicable',
+      scheduleTiming: defaultReqAppt ? 'during_purchase' : 'not_applicable',
       displayOrder: effectiveOptionalAddons.options.length
     };
+    if (prelinkedBaseOptionId && onCommercialPriceOptionsChange) {
+      onCommercialPriceOptionsChange(
+        commercialPriceOptions.map(co =>
+          co.id === prelinkedBaseOptionId
+            ? { ...co, allowOptionalAddons: true }
+            : co.allowOptionalAddons === undefined
+              ? { ...co, allowOptionalAddons: false }
+              : co
+        )
+      );
+    }
     onOptionalAddonsChange({
       ...effectiveOptionalAddons,
       enabled: true,
       options: [...effectiveOptionalAddons.options, nextOption]
     });
     setShowOptionalAddons(true);
+  };
+
+  const toggleCommercialOptionAllowAddons = (idx: number, allowed: boolean) => {
+    if (!onCommercialPriceOptionsChange) return;
+    const targetOpt = commercialPriceOptions[idx];
+    if (!targetOpt) return;
+    const nextCommercial = commercialPriceOptions.map((co, i) => {
+      if (i === idx) return { ...co, allowOptionalAddons: allowed };
+      // Ao habilitar explicitamente em uma opção comercial, evita habilitar implicitamente as outras que estavam indefinidas
+      if (allowed && co.allowOptionalAddons === undefined) {
+        const hadExplicitAddon = effectiveOptionalAddons.options.some(
+          ao => ao.active && Array.isArray(ao.acceptedBaseOptionIds) && ao.acceptedBaseOptionIds.includes(co.id)
+        );
+        return { ...co, allowOptionalAddons: hadExplicitAddon };
+      }
+      return co;
+    });
+    onCommercialPriceOptionsChange(nextCommercial);
+
+    if (!allowed && onOptionalAddonsChange && effectiveOptionalAddons.options.length > 0) {
+      const nextAddonOpts = effectiveOptionalAddons.options.map(ao => {
+        const hadId = Array.isArray(ao.acceptedBaseOptionIds) && ao.acceptedBaseOptionIds.includes(targetOpt.id);
+        if (!hadId && ao.baseOptionRestrictionMode !== 'all') return ao;
+        const remainingIds = hadId
+          ? ao.acceptedBaseOptionIds.filter(id => id !== targetOpt.id)
+          : nextCommercial.filter(co => co.active !== false && co.allowOptionalAddons !== false).map(co => co.id);
+        return {
+          ...ao,
+          acceptedBaseOptionIds: remainingIds,
+          baseOptionRestrictionMode: 'selected' as const
+        };
+      });
+      onOptionalAddonsChange({ ...effectiveOptionalAddons, options: nextAddonOpts });
+    }
+  };
+
+  const toggleAddonLinkForCommercialOption = (baseOptId: string, addonIdx: number) => {
+    if (!onOptionalAddonsChange) return;
+    const addon = effectiveOptionalAddons.options[addonIdx];
+    if (!addon) return;
+    const isRestricted = addon.baseOptionRestrictionMode === 'selected' || addon.acceptedBaseOptionIds.length > 0;
+    const baseOptObj = commercialPriceOptions.find(co => co.id === baseOptId) || null;
+    const currentlyApplies = addonAppliesToBaseOption(addon, baseOptObj);
+
+    let nextIds: string[];
+    if (currentlyApplies) {
+      if (isRestricted) {
+        nextIds = addon.acceptedBaseOptionIds.filter(id => id !== baseOptId);
+      } else {
+        nextIds = commercialPriceOptions
+          .filter(co => co.id !== baseOptId && co.allowOptionalAddons !== false)
+          .map(co => co.id);
+      }
+    } else {
+      const prevIds = isRestricted ? addon.acceptedBaseOptionIds : [];
+      nextIds = Array.from(new Set([...prevIds, baseOptId]));
+    }
+
+    if (!currentlyApplies && onCommercialPriceOptionsChange) {
+      onCommercialPriceOptionsChange(
+        commercialPriceOptions.map(co =>
+          co.id === baseOptId
+            ? { ...co, allowOptionalAddons: true }
+            : co.allowOptionalAddons === undefined
+              ? {
+                  ...co,
+                  allowOptionalAddons: effectiveOptionalAddons.options.some(
+                    ao => ao.active && ao.acceptedBaseOptionIds.includes(co.id)
+                  )
+                }
+              : co
+        )
+      );
+    }
+
+    onOptionalAddonsChange({
+      ...effectiveOptionalAddons,
+      enabled: !currentlyApplies ? true : effectiveOptionalAddons.enabled,
+      options: effectiveOptionalAddons.options.map((ao, i) =>
+        i === addonIdx
+          ? {
+              ...ao,
+              acceptedBaseOptionIds: nextIds,
+              baseOptionRestrictionMode: 'selected' as const
+            }
+          : ao
+      )
+    });
   };
 
   const updateOptionalAddonOption = (idx: number, patch: Partial<StudioOptionalAddonOption>) => {
@@ -389,7 +499,27 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
 
   const removeCommercialOption = (idx: number) => {
     if (!onCommercialPriceOptionsChange) return;
-    onCommercialPriceOptionsChange(commercialPriceOptions.filter((_, i) => i !== idx));
+    const removed = commercialPriceOptions[idx];
+    const nextCommercial = commercialPriceOptions.filter((_, i) => i !== idx);
+    onCommercialPriceOptionsChange(nextCommercial);
+    // Limpa referências órfãs com segurança sem jamais converter restrição 'selected' em 'all'
+    if (removed?.id && onOptionalAddonsChange && effectiveOptionalAddons.options.length > 0) {
+      let changed = false;
+      const nextAddonOpts = effectiveOptionalAddons.options.map(ao => {
+        if (!Array.isArray(ao.acceptedBaseOptionIds) || !ao.acceptedBaseOptionIds.includes(removed.id)) {
+          return ao;
+        }
+        changed = true;
+        return {
+          ...ao,
+          acceptedBaseOptionIds: ao.acceptedBaseOptionIds.filter(id => id !== removed.id),
+          baseOptionRestrictionMode: 'selected' as const
+        };
+      });
+      if (changed) {
+        onOptionalAddonsChange({ ...effectiveOptionalAddons, options: nextAddonOpts });
+      }
+    }
   };
 
   const cfg = accessConfig || DEFAULT_STUDIO_ACCESS_CONFIG;
@@ -1089,17 +1219,41 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                     </select>
                     <select
                       value={opt.frequencyType}
-                      onChange={e => updateCommercialOption(idx, {
-                        frequencyType: e.target.value as any,
-                        frequencyCount: e.target.value === 'unlimited' ? null : (opt.frequencyCount || 1)
-                      })}
+                      onChange={e => {
+                        const nextFreq = e.target.value as any;
+                        const nextAccessType =
+                          studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled'
+                            ? (nextFreq === 'unlimited' ? 'unlimited' : 'limited')
+                            : (nextFreq === 'unlimited' ? 'unlimited' : 'scheduled');
+                        updateCommercialOption(idx, {
+                          frequencyType: nextFreq,
+                          accessType: nextAccessType,
+                          frequencyCount: nextFreq === 'unlimited' ? null : (opt.frequencyCount || 1),
+                          ...(nextFreq === 'unlimited' ? { creditMode: 'unlimited', creditsPerCycle: null } : {})
+                        });
+                      }}
                       className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white"
                     >
                       <option value="unlimited">Uso livre / ilimitado</option>
                       <option value="weekly">Frequência semanal</option>
                       <option value="monthly">Frequência mensal</option>
-                      <option value="fixed_count">Quantidade fixa</option>
+                      {studioServiceType !== 'facility_access' && <option value="fixed_count">Quantidade fixa</option>}
                     </select>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        studioServiceType === 'facility_access' || opt.accessType === 'unlimited' || opt.accessType === 'limited'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                      }`}
+                    >
+                      {studioServiceType === 'facility_access'
+                        ? (opt.frequencyType === 'unlimited' ? 'Acesso livre (sem agendamento)' : 'Acesso limitado (sem agendamento)')
+                        : opt.accessType === 'unlimited'
+                          ? 'Acesso livre'
+                          : opt.accessType === 'limited'
+                            ? 'Acesso limitado'
+                            : 'Horário marcado'}
+                    </span>
                     {opt.frequencyType !== 'unlimited' && (
                       <input
                         type="number"
@@ -1141,7 +1295,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                       Pública
                     </label>
                   </div>
-                  {opt.accessType !== 'unlimited' && opt.frequencyType !== 'unlimited' && (
+                  {studioServiceType !== 'facility_access' && opt.accessType !== 'unlimited' && opt.frequencyType !== 'unlimited' && (
                     <div className="flex flex-wrap items-center gap-2 text-[11px] pt-1 border-t border-slate-200/70">
                       <span className="text-slate-600 font-medium">Modelo de créditos:</span>
                       <select
@@ -1184,6 +1338,84 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                       })()}
                     </div>
                   )}
+
+                  {/* Complementos opcionais vinculados especificamente a esta opção comercial */}
+                  {onOptionalAddonsChange && !hideOptionalAddons && (() => {
+                    const isAllowedOnThisOption =
+                      opt.allowOptionalAddons === true ||
+                      (opt.allowOptionalAddons === undefined &&
+                        effectiveOptionalAddons.enabled &&
+                        effectiveOptionalAddons.options.some(ao => addonAppliesToBaseOption(ao, opt)));
+                    const linkedAddonsCount = effectiveOptionalAddons.options.filter(ao =>
+                      addonAppliesToBaseOption(ao, { ...opt, allowOptionalAddons: isAllowedOnThisOption })
+                    ).length;
+                    return (
+                      <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isAllowedOnThisOption}
+                              onChange={e => toggleCommercialOptionAllowAddons(idx, e.target.checked)}
+                            />
+                            <span>Permitir complementos opcionais neste plano</span>
+                          </label>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            isAllowedOnThisOption && linkedAddonsCount > 0
+                              ? 'bg-teal-100 text-teal-800'
+                              : isAllowedOnThisOption
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {isAllowedOnThisOption
+                              ? linkedAddonsCount > 0
+                                ? `${linkedAddonsCount} complemento(s) vinculado(s)`
+                                : 'Selecione os complementos abaixo'
+                              : 'Sem complementos neste plano'}
+                          </span>
+                        </div>
+
+                        {isAllowedOnThisOption && (
+                          <div className="rounded-lg bg-white border border-teal-100 p-2 space-y-1.5">
+                            {effectiveOptionalAddons.options.length > 0 ? (
+                              <div className="flex flex-wrap gap-1.5">
+                                {effectiveOptionalAddons.options.map((ao, aoIdx) => {
+                                  const isLinked = addonAppliesToBaseOption(ao, { ...opt, allowOptionalAddons: true });
+                                  return (
+                                    <button
+                                      key={ao.id}
+                                      type="button"
+                                      onClick={() => toggleAddonLinkForCommercialOption(opt.id, aoIdx)}
+                                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+                                        isLinked
+                                          ? 'bg-teal-600 text-white border-teal-600'
+                                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-teal-300'
+                                      }`}
+                                    >
+                                      {isLinked ? '✓ ' : '+ '}
+                                      {ao.label || ao.addonServiceName || `Complemento #${aoIdx + 1}`}
+                                      {ao.additionalPriceCents > 0 ? ` (R$ ${(ao.additionalPriceCents / 100).toFixed(2).replace('.', ',')})` : ''}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-slate-500">
+                                Nenhum complemento configurado ainda. Clique abaixo para criar e vincular diretamente a este plano.
+                              </p>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => addOptionalAddonOption(opt.id)}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" /> Vincular novo complemento a este plano
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
               <button
@@ -1478,7 +1710,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                       <div>
                         <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Frequência</label>
                         <select
@@ -1486,10 +1718,12 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                           onChange={e => {
                             const nextFreq = e.target.value as any;
                             const nextCount = nextFreq === 'unlimited' ? null : (opt.frequencyCount || 1);
+                            const nextCreditMode = nextFreq === 'unlimited' ? 'unlimited' : (opt.creditMode === 'weekly_guaranteed' ? 'weekly_guaranteed' : 'fixed_credits');
                             updateOptionalAddonOption(idx, {
                               frequencyType: nextFreq,
                               frequencyCount: nextCount,
-                              creditsPerCycle: resolveDefaultAddonCreditsPerCycle(nextFreq, nextCount, 1)
+                              creditMode: nextCreditMode,
+                              creditsPerCycle: nextCreditMode === 'fixed_credits' ? resolveDefaultAddonCreditsPerCycle(nextFreq, nextCount, 1) : null
                             });
                           }}
                           className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
@@ -1510,9 +1744,10 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                             value={opt.frequencyCount ?? 1}
                             onChange={e => {
                               const nextCount = Math.max(1, Number(e.target.value) || 1);
+                              const curCreditMode = opt.creditMode || 'fixed_credits';
                               updateOptionalAddonOption(idx, {
                                 frequencyCount: nextCount,
-                                creditsPerCycle: resolveDefaultAddonCreditsPerCycle(opt.frequencyType, nextCount, 1)
+                                creditsPerCycle: curCreditMode === 'fixed_credits' ? resolveDefaultAddonCreditsPerCycle(opt.frequencyType, nextCount, 1) : null
                               });
                             }}
                             className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white text-center font-semibold"
@@ -1520,6 +1755,28 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                         </div>
                       )}
                       {opt.frequencyType !== 'unlimited' && (
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Regra de créditos</label>
+                          <select
+                            value={opt.creditMode || 'fixed_credits'}
+                            onChange={e => {
+                              const nextMode = e.target.value as PlanCreditMode;
+                              updateOptionalAddonOption(idx, {
+                                creditMode: nextMode,
+                                creditsPerCycle:
+                                  nextMode === 'fixed_credits'
+                                    ? (opt.creditsPerCycle ?? resolveDefaultAddonCreditsPerCycle(opt.frequencyType, opt.frequencyCount, 1))
+                                    : null
+                              });
+                            }}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                          >
+                            <option value="fixed_credits">Créditos fixos por ciclo</option>
+                            <option value="weekly_guaranteed">Frequência semanal garantida</option>
+                          </select>
+                        </div>
+                      )}
+                      {opt.frequencyType !== 'unlimited' && (opt.creditMode || 'fixed_credits') === 'fixed_credits' && (
                         <div>
                           <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Aulas/créditos por ciclo</label>
                           <input
@@ -1778,37 +2035,67 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                       </div>
                     )}
 
-                    {commercialPriceOptions.length > 0 && (
-                      <div className="pt-1 border-t border-slate-200/80">
-                        <span className="block text-[11px] font-semibold text-slate-600 mb-1">
-                          Planos-base que aceitam este complemento (deixe todos desmarcados para aceitar qualquer opção):
-                        </span>
+                    {commercialPriceOptions.length > 0 && (() => {
+                      const restrictMode = opt.baseOptionRestrictionMode || (opt.acceptedBaseOptionIds.length > 0 ? 'selected' : 'all');
+                      return (
+                      <div className="pt-1.5 border-t border-slate-200/80 space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[11px] font-semibold text-slate-600">
+                            Opções comerciais autorizadas para este complemento:
+                          </span>
+                          <div className="flex items-center gap-1.5 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => updateOptionalAddonOption(idx, { baseOptionRestrictionMode: 'selected' })}
+                              className={`px-2 py-0.5 rounded-md border font-bold cursor-pointer ${
+                                restrictMode === 'selected'
+                                  ? 'bg-teal-700 text-white border-teal-700'
+                                  : 'bg-white text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              Somente planos selecionados
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateOptionalAddonOption(idx, { baseOptionRestrictionMode: 'all', acceptedBaseOptionIds: [] })}
+                              className={`px-2 py-0.5 rounded-md border font-bold cursor-pointer ${
+                                restrictMode === 'all'
+                                  ? 'bg-slate-700 text-white border-slate-700'
+                                  : 'bg-white text-slate-600 border-slate-200'
+                              }`}
+                            >
+                              Todos os planos habilitados
+                            </button>
+                          </div>
+                        </div>
+                        {restrictMode === 'selected' && opt.acceptedBaseOptionIds.length === 0 && (
+                          <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
+                            Nenhum plano selecionado ainda — este complemento não aparecerá no link público até que você marque pelo menos uma opção comercial abaixo.
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-1.5">
                           {commercialPriceOptions.filter(bo => bo.active).map(bo => {
-                            const checked = opt.acceptedBaseOptionIds.includes(bo.id);
+                            const checked = addonAppliesToBaseOption(opt, bo);
                             return (
                               <button
                                 key={bo.id}
                                 type="button"
-                                onClick={() => {
-                                  const nextIds = checked
-                                    ? opt.acceptedBaseOptionIds.filter(id => id !== bo.id)
-                                    : [...opt.acceptedBaseOptionIds, bo.id];
-                                  updateOptionalAddonOption(idx, { acceptedBaseOptionIds: nextIds });
-                                }}
-                                className={`px-2 py-0.5 rounded-full text-[11px] border font-semibold cursor-pointer ${
+                                onClick={() => toggleAddonLinkForCommercialOption(bo.id, idx)}
+                                className={`px-2.5 py-0.5 rounded-full text-[11px] border font-semibold cursor-pointer ${
                                   checked
                                     ? 'bg-teal-600 text-white border-teal-600'
                                     : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'
                                 }`}
                               >
-                                {bo.label || PAYMENT_PERIODICITY_LABELS[bo.paymentPeriodicity] || bo.id}
+                                {checked ? '✓ ' : ''}
+                                {bo.label || `${PLAN_DURATION_LABELS[bo.contractDurationCode] || bo.contractDurationCode} · R$ ${(bo.amountCents / 100).toFixed(2).replace('.', ',')}`}
                               </button>
                             );
                           })}
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -1816,7 +2103,7 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={addOptionalAddonOption}
+                  onClick={() => addOptionalAddonOption()}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" /> Adicionar complemento opcional

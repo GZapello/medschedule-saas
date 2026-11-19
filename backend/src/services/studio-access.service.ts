@@ -311,7 +311,10 @@ export class StudioAccessService {
       overdueGraceDays: input.overdueGraceDays !== undefined ? Number(input.overdueGraceDays) : baseAccessCfg.overdueGraceDays
     };
 
-    const commercialOptions = normalizeCommercialPriceOptions(srv.commercial_price_options_json);
+    const commercialOptions = normalizeCommercialPriceOptions(srv.commercial_price_options_json, {
+      studioServiceType: srvStudioType,
+      requiresAppointment: srv.requires_appointment
+    });
     const matchedOption = input.commercialOptionId
       ? commercialOptions.find(o => o.id === input.commercialOptionId && o.active)
       : null;
@@ -838,7 +841,7 @@ export class StudioAccessService {
       if (!opt) {
         throw Object.assign(new Error('Complemento opcional não encontrado ou inativo neste plano.'), { status: 400 });
       }
-      if (!addonAppliesToBaseOption(opt, matchedOption?.id || null)) {
+      if (!addonAppliesToBaseOption(opt, matchedOption)) {
         throw Object.assign(new Error(`O complemento "${opt.label}" não é válido para o plano-base selecionado.`), { status: 400 });
       }
       const addonSrv = lookupTargetStmt.get(opt.addonServiceId, input.tenantId) as any;
@@ -1125,29 +1128,33 @@ export class StudioAccessService {
         mAddon._srvType === 'facility_access'
           ? 'facility_access'
           : (mAddon._srvType === 'non_scheduled' ? 'deliverable' : 'scheduled_service');
+      const addonCreditMode =
+        entType === 'facility_access' || itemBreakdown.frequencyType === 'unlimited'
+          ? 'unlimited'
+          : (itemBreakdown.creditMode || 'fixed_credits');
+      const initialScheduledCount = input.initialAddonCountsByServiceId?.[mAddon.addonServiceId] || 0;
       let entCredits =
         entType === 'facility_access'
           ? 0
           : (entType === 'deliverable'
               ? 1
-              : (itemBreakdown.totalCreditsInDuration ?? itemBreakdown.creditsPerCycle ?? 0));
-      const initialScheduledCount = input.initialAddonCountsByServiceId?.[mAddon.addonServiceId] || 0;
-      if (
-        entType === 'scheduled_service' &&
-        itemBreakdown.frequencyType === 'weekly' &&
-        initialScheduledCount > entCredits
-      ) {
-        const weeklyCap = Math.max(1, itemBreakdown.frequencyCount || 1);
-        const maxWeeksCeiling = Math.ceil(itemBreakdown.durationMonths * 4.5) * weeklyCap;
-        entCredits = Math.min(maxWeeksCeiling, initialScheduledCount);
-      }
+              : addonCreditMode === 'unlimited'
+                ? 0
+                : addonCreditMode === 'weekly_guaranteed'
+                  ? Math.max(initialScheduledCount, Math.ceil(Math.max(1, itemBreakdown.frequencyCount || 1) * 4.5 * itemBreakdown.durationMonths))
+                  : (itemBreakdown.totalCreditsInDuration ?? itemBreakdown.creditsPerCycle ?? 0));
       const weeklyFreq = itemBreakdown.frequencyType === 'weekly' ? itemBreakdown.frequencyCount : null;
       const monthlyLimit = itemBreakdown.frequencyType === 'monthly' ? itemBreakdown.frequencyCount : null;
       const addonSchedList = input.initialAddonSchedulesByServiceId?.[mAddon.addonServiceId];
-      const addonCreditMode =
-        entType === 'facility_access' || itemBreakdown.frequencyType === 'unlimited'
-          ? 'unlimited'
-          : 'fixed_credits';
+      const addonEndDate = addDaysIso(
+        addMonthsClampIso(startDate, itemBreakdown.durationMonths, Number(startDate.slice(8, 10))),
+        -1
+      );
+      const enrichedAddonPricing = {
+        ...itemBreakdown,
+        startDate,
+        endDate: addonEndDate
+      };
 
       insEnt.run(
         'ent-' + uuidv4().slice(0, 8),
@@ -1163,7 +1170,7 @@ export class StudioAccessService {
         entType,
         'addon',
         mAddon.id,
-        JSON.stringify(itemBreakdown),
+        JSON.stringify(enrichedAddonPricing),
         entType === 'facility_access' ? (itemBreakdown.frequencyType === 'unlimited' ? 'unlimited' : 'limited') : null,
         monthlyLimit,
         null,
@@ -1402,7 +1409,10 @@ export class StudioAccessService {
           nextServiceId = newSrv.id;
           nextTitle = `Plano: ${newSrv.name}`;
 
-          const commOptions = normalizeCommercialPriceOptions(newSrv.commercial_price_options_json);
+          const commOptions = normalizeCommercialPriceOptions(newSrv.commercial_price_options_json, {
+            studioServiceType: newSrv.studio_service_type,
+            requiresAppointment: newSrv.requires_appointment
+          });
           const matchedOpt = params.newCommercialOptionId
             ? commOptions.find(o => o.id === params.newCommercialOptionId && o.active)
             : null;
@@ -1935,16 +1945,39 @@ export class StudioAccessService {
     }
 
     const establishmentProfile = getTenantEstablishmentProfile(params.tenantId);
-    const baseOptions = normalizeCommercialPriceOptions(baseSrv.commercial_price_options_json);
+    const baseOptions = normalizeCommercialPriceOptions(baseSrv.commercial_price_options_json, {
+      studioServiceType: baseSrv.studio_service_type
+    });
     const fallbackBase = buildFallbackBaseCommercialOption(baseSrv);
     let baseOptForCalc = fallbackBase;
+    let resolvedCatalogBaseOpt: any = null;
     if (pkgContract?.commercial_snapshot_json) {
       try {
         const parsed = JSON.parse(pkgContract.commercial_snapshot_json);
-        if (parsed?.baseOption?.id) baseOptForCalc = parsed.baseOption;
+        if (parsed?.baseOption?.id) {
+          baseOptForCalc = parsed.baseOption;
+          resolvedCatalogBaseOpt = baseOptions.find(o => o.id === parsed.baseOption.id) || parsed.baseOption;
+        }
       } catch (_) {}
-    } else if (baseOptions.length > 0 && soloPlan?.plan_duration_code) {
+    } else if (soloPlan?.commercial_snapshot_json) {
+      try {
+        const parsed = JSON.parse(soloPlan.commercial_snapshot_json);
+        if (parsed?.baseOption?.id) {
+          baseOptForCalc = parsed.baseOption;
+          resolvedCatalogBaseOpt = baseOptions.find(o => o.id === parsed.baseOption.id) || parsed.baseOption;
+        }
+      } catch (_) {}
+    }
+    if (!resolvedCatalogBaseOpt && baseOptions.length > 0 && soloPlan?.plan_duration_code) {
       baseOptForCalc = baseOptions.find(o => o.contractDurationCode === soloPlan.plan_duration_code && o.active) || fallbackBase;
+      resolvedCatalogBaseOpt = baseOptForCalc;
+    }
+
+    if (resolvedCatalogBaseOpt && !addonAppliesToBaseOption(addonOpt, resolvedCatalogBaseOpt)) {
+      throw Object.assign(
+        new Error(`O complemento "${addonOpt.label}" não está habilitado para a opção comercial desta matrícula.`),
+        { status: 400 }
+      );
     }
 
     const itemBreakdown = calculatePlanWithAddonsBreakdown({
@@ -2058,21 +2091,35 @@ export class StudioAccessService {
       addonSrvType === 'facility_access'
         ? 'facility_access'
         : (addonSrvType === 'non_scheduled' ? 'deliverable' : 'scheduled_service');
+    const addonCreditMode =
+      entType === 'facility_access' || itemBreakdown.frequencyType === 'unlimited'
+        ? 'unlimited'
+        : (itemBreakdown.creditMode || 'fixed_credits');
     const entCredits =
       entType === 'facility_access'
         ? 0
         : (entType === 'deliverable'
             ? 1
-            : (itemBreakdown.totalCreditsInDuration ?? itemBreakdown.creditsPerCycle ?? 0));
+            : addonCreditMode === 'unlimited'
+              ? 0
+              : addonCreditMode === 'weekly_guaranteed'
+                ? Math.ceil(Math.max(1, itemBreakdown.frequencyCount || 1) * 4.5 * itemBreakdown.durationMonths)
+                : (itemBreakdown.totalCreditsInDuration ?? itemBreakdown.creditsPerCycle ?? 0));
+    const addonStartDate = params.startDate ? String(params.startDate).slice(0, 10) : todayIso;
+    const addonEndDate = addDaysIso(
+      addMonthsClampIso(addonStartDate, itemBreakdown.durationMonths, Number(addonStartDate.slice(8, 10))),
+      -1
+    );
 
     const newEntId = 'ent-' + uuidv4().slice(0, 8);
     db.prepare(`
       INSERT INTO student_package_entitlements (
         id, tenant_id, contract_id, service_id, service_name_snapshot,
         allowed_service_ids_json, weekly_frequency_snapshot, credits_total, credits_reserved, credits_used,
+        credit_mode_snapshot, credits_per_cycle_snapshot,
         entitlement_type, entitlement_role, addon_option_id, addon_pricing_json,
         access_mode_snapshot, monthly_limit_snapshot, schedule_snapshot_json, entries_used
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'addon', ?, ?, ?, ?, ?, 0)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, 'addon', ?, ?, ?, ?, ?, 0)
     `).run(
       newEntId,
       params.tenantId,
@@ -2082,9 +2129,11 @@ export class StudioAccessService {
       JSON.stringify([addonOpt.addonServiceId]),
       itemBreakdown.frequencyType === 'weekly' ? itemBreakdown.frequencyCount : null,
       entCredits,
+      addonCreditMode,
+      entType === 'scheduled_service' && addonCreditMode === 'fixed_credits' ? (itemBreakdown.creditsPerCycle ?? null) : null,
       entType,
       addonOpt.id,
-      JSON.stringify(itemBreakdown),
+      JSON.stringify({ ...itemBreakdown, startDate: addonStartDate, endDate: addonEndDate }),
       entType === 'facility_access' ? (itemBreakdown.frequencyType === 'unlimited' ? 'unlimited' : 'limited') : null,
       itemBreakdown.frequencyType === 'monthly' ? itemBreakdown.frequencyCount : null,
       Array.isArray(params.scheduleEntries) && params.scheduleEntries.length > 0 ? JSON.stringify(params.scheduleEntries) : null
@@ -2539,15 +2588,28 @@ export class StudioAccessService {
       LIMIT 100
     `).all(tenantId, contractId, contractId) as any[];
 
-    // Carrega opções de complementos ainda disponíveis para inclusão posterior no contrato ativo
+    // Carrega opções de complementos ainda disponíveis para inclusão posterior no contrato ativo (filtradas pela opção comercial contratada)
     let availableAddons: any[] = [];
     const baseSrvId = enrollment.baseServiceId || enrollment.serviceId;
     if (baseSrvId && !['cancelled', 'expired'].includes(enrollment.lifecycleCategory)) {
       const baseSrv = db
-        .prepare(`SELECT optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`)
-        .get(baseSrvId, tenantId) as { optional_addons_json?: string | null } | undefined;
+        .prepare(`SELECT studio_service_type, requires_appointment, commercial_price_options_json, optional_addons_json FROM services WHERE id = ? AND tenant_id = ?`)
+        .get(baseSrvId, tenantId) as {
+          studio_service_type?: string | null;
+          requires_appointment?: number | null;
+          commercial_price_options_json?: string | null;
+          optional_addons_json?: string | null;
+        } | undefined;
       if (baseSrv?.optional_addons_json) {
         const cfg = normalizeOptionalAddonsConfig(baseSrv.optional_addons_json);
+        const baseCommOpts = normalizeCommercialPriceOptions(baseSrv.commercial_price_options_json, {
+          studioServiceType: baseSrv.studio_service_type,
+          requiresAppointment: baseSrv.requires_appointment
+        });
+        const snapBaseOpt = enrollment.commercialSnapshot?.baseOption || null;
+        const matchedCatalogBaseOpt = snapBaseOpt?.id
+          ? (baseCommOpts.find(o => o.id === snapBaseOpt.id) || snapBaseOpt)
+          : null;
         const activeAddonOptIds = new Set(
           (enrollment.entitlements || [])
             .filter((e: any) => e.entitlement_role === 'addon' && String(e.entitlement_status || 'active') !== 'cancelled')
@@ -2555,7 +2617,13 @@ export class StudioAccessService {
             .filter(Boolean)
         );
         availableAddons = cfg.options
-          .filter(o => o.active && o.addonServiceId && !activeAddonOptIds.has(o.id))
+          .filter(
+            o =>
+              o.active &&
+              o.addonServiceId &&
+              !activeAddonOptIds.has(o.id) &&
+              addonAppliesToBaseOption(o, matchedCatalogBaseOpt)
+          )
           .map(o => ({
             id: o.id,
             label: o.label,
@@ -2563,11 +2631,13 @@ export class StudioAccessService {
             addonServiceName: o.addonServiceName || null,
             frequencyType: o.frequencyType,
             frequencyCount: o.frequencyCount,
+            creditMode: o.creditMode || 'fixed_credits',
             creditsPerCycle: o.creditsPerCycle,
             additionalPriceCents: o.additionalPriceCents,
             comboDiscountType: o.comboDiscountType,
             comboDiscountValue: o.comboDiscountValue,
-            billingPeriodicity: o.billingPeriodicity
+            billingPeriodicity: o.billingPeriodicity,
+            durationMode: o.durationMode
           }));
       }
     }

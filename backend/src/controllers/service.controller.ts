@@ -45,6 +45,7 @@ import {
   normalizeStudioPriceAdjustments,
   normalizeStudioServiceType,
   normalizePlanCreditMode,
+  reconcileCommercialOptionsAndAddons,
   resolveServiceCommercialModes,
   OptionalAddonTargetSummary,
   StudioOptionalAddonsConfig,
@@ -849,7 +850,10 @@ export class ServiceController {
             : [];
         const commercialPriceOptions =
           resolvedDomain === 'studio'
-            ? normalizeCommercialPriceOptions(srv.commercial_price_options_json)
+            ? normalizeCommercialPriceOptions(srv.commercial_price_options_json, {
+                studioServiceType: resolvedStudioType,
+                requiresAppointment: resolvedRequiresAppt
+              })
             : [];
         const optionalAddons =
           resolvedDomain === 'studio'
@@ -1225,9 +1229,17 @@ export class ServiceController {
         return;
       }
 
+      const resolvedRequiresAppointment =
+        isStudioCompat && resolvedDomain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled')
+          ? 0
+          : 1;
+
       const normalizedCommercialOptions =
         isStudioCompat && resolvedDomain === 'studio'
-          ? normalizeCommercialPriceOptions(rawCommercialOptions)
+          ? normalizeCommercialPriceOptions(rawCommercialOptions, {
+              studioServiceType: resolvedStudioType,
+              requiresAppointment: resolvedRequiresAppointment
+            })
           : [];
       const fallbackOptionReais =
         normalizedCommercialOptions.find(o => o.active && (o.commercialUnit === 'per_month' || o.paymentPeriodicity === 'monthly'))?.amountCents ??
@@ -1278,11 +1290,14 @@ export class ServiceController {
         res.status(400).json({ error: addonsValidation.error });
         return;
       }
-      const normalizedOptionalAddonsJson = addonsValidation.configJson;
-      const resolvedRequiresAppointment =
-        isStudioCompat && resolvedDomain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled')
-          ? 0
-          : 1;
+      const reconciledCreate = reconcileCommercialOptionsAndAddons(
+        normalizedCommercialOptions,
+        addonsValidation.config
+      );
+      const normalizedOptionalAddonsJson =
+        reconciledCreate.optionalAddons && (reconciledCreate.optionalAddons.enabled || reconciledCreate.optionalAddons.options.length > 0)
+          ? JSON.stringify(reconciledCreate.optionalAddons)
+          : addonsValidation.configJson;
 
       const rawPriceNum = price !== undefined && price !== null && price !== '' ? Number(price) : 0;
       const safeRawPriceNum = Number.isFinite(rawPriceNum) && rawPriceNum > 0 ? rawPriceNum : 0;
@@ -2004,7 +2019,10 @@ export class ServiceController {
 
         const updCommercialOptPreview =
           isStudioCompat && nextDomain === 'studio'
-            ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json)
+            ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json, {
+                studioServiceType: nextStudioType,
+                requiresAppointment: nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled' ? 0 : 1
+              })
             : [];
         const updOptFallbackReais =
           updCommercialOptPreview.find(o => o.active && (o.commercialUnit === 'per_month' || o.paymentPeriodicity === 'monthly'))?.amountCents ??
@@ -2067,14 +2085,17 @@ export class ServiceController {
       const nextFrequencyPricingPreview = req.body.frequencyPricing === undefined
         ? readFrequencyPricing(existing.frequency_pricing_json)
         : frequencyConfigForSave(req.body.frequencyPricing, establishmentProfile, nextDomain, nextBillingMode, nextStudioType);
-      const nextCommercialOptionsPreview =
-        isStudioCompat && nextDomain === 'studio'
-          ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json)
-          : [];
       const nextRequiresApptPreview =
         isStudioCompat && nextDomain === 'studio' && (nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled')
           ? 0
           : 1;
+      const nextCommercialOptionsPreview =
+        isStudioCompat && nextDomain === 'studio'
+          ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json, {
+              studioServiceType: nextStudioType,
+              requiresAppointment: nextRequiresApptPreview
+            })
+          : [];
       const updatedModes = resolveServiceCommercialModes(
         {
           service_domain: nextDomain,
@@ -2276,7 +2297,10 @@ export class ServiceController {
           : [];
       const nextCommercialOptions =
         isStudioCompat && nextDomain === 'studio'
-          ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json)
+          ? normalizeCommercialPriceOptions(rawCommercialOptions !== undefined ? rawCommercialOptions : existing.commercial_price_options_json, {
+              studioServiceType: nextStudioType,
+              requiresAppointment: nextRequiresApptPreview
+            })
           : [];
       let nextOptionalAddonsJson: string | null =
         isStudioCompat && nextDomain === 'studio' ? (existing.optional_addons_json || null) : null;
@@ -2293,12 +2317,31 @@ export class ServiceController {
           res.status(400).json({ error: addonsValidation.error });
           return;
         }
-        nextOptionalAddonsJson = addonsValidation.configJson;
+        const reconciledUpdate = reconcileCommercialOptionsAndAddons(
+          nextCommercialOptions,
+          addonsValidation.config
+        );
+        nextOptionalAddonsJson =
+          reconciledUpdate.optionalAddons && (reconciledUpdate.optionalAddons.enabled || reconciledUpdate.optionalAddons.options.length > 0)
+            ? JSON.stringify(reconciledUpdate.optionalAddons)
+            : addonsValidation.configJson;
+      } else if (isStudioCompat && nextDomain === 'studio' && rawCommercialOptions !== undefined && existing.optional_addons_json) {
+        const existingParsedAddons = normalizeOptionalAddonsConfig(existing.optional_addons_json);
+        const reconciledExisting = reconcileCommercialOptionsAndAddons(
+          nextCommercialOptions,
+          existingParsedAddons
+        );
+        nextOptionalAddonsJson =
+          reconciledExisting.optionalAddons && (reconciledExisting.optionalAddons.enabled || reconciledExisting.optionalAddons.options.length > 0)
+            ? JSON.stringify(reconciledExisting.optionalAddons)
+            : null;
       }
+
+      const forceClearFacilityProf = nextStudioType === 'facility_access' && !professionalId;
 
       db.transaction(() => {
         updateStmt.run(
-          professionalId !== undefined ? 1 : 0, professionalId || null,
+          (professionalId !== undefined || forceClearFacilityProf) ? 1 : 0, forceClearFacilityProf ? null : (professionalId || null),
           specialtyId !== undefined ? 1 : 0, specialtyId || null,
           name !== undefined ? 1 : 0, name ? name.trim() : existing.name,
           description !== undefined ? 1 : 0, description !== null ? description : null,
@@ -2573,7 +2616,10 @@ export class ServiceController {
         return;
       }
 
-      const options = normalizeCommercialPriceOptions(srv.commercial_price_options_json);
+      const options = normalizeCommercialPriceOptions(srv.commercial_price_options_json, {
+        studioServiceType: srv.studio_service_type,
+        requiresAppointment: srv.requires_appointment
+      });
       const adjustments = normalizeStudioPriceAdjustments(srv.pricing_adjustments_json);
 
       const requestedOptionId = req.body?.optionId ? String(req.body.optionId).trim() : null;
@@ -2598,7 +2644,7 @@ export class ServiceController {
       const addonsCfg = normalizeOptionalAddonsConfig(srv.optional_addons_json);
       const selectedAddons = requestedAddonIds.length > 0 && addonsCfg.enabled
         ? addonsCfg.options.filter(
-            (opt) => requestedAddonIds.includes(opt.id) && addonAppliesToBaseOption(opt, selectedOption?.id || null)
+            (opt) => requestedAddonIds.includes(opt.id) && addonAppliesToBaseOption(opt, selectedOption || effectiveBaseOption)
           )
         : [];
       const planWithAddonsBreakdown = selectedAddons.length > 0

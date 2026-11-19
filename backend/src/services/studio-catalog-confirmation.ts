@@ -228,7 +228,9 @@ function priceHasValidationIssue(p: ProposedPrice, rowType: ProposedService['typ
     }
     return null;
   }
-  const limitedAccess = rowType === 'access_limited' || p.frequencyType === 'weekly' || p.frequencyType === 'monthly';
+  const limitedAccess = p.frequencyType === 'unlimited'
+    ? false
+    : (p.frequencyType === 'weekly' || p.frequencyType === 'monthly' || rowType === 'access_limited');
   const accessType = opType === 'facility_access' ? (limitedAccess ? 'limited' : 'unlimited') : 'scheduled';
   const frequencyType = p.frequencyType || (accessType === 'unlimited' ? 'unlimited' : null);
 
@@ -573,6 +575,20 @@ export function buildProposalDiagnostics(
             message: `${row.name || 'Serviço'} · Complemento "${ao.label || ao.addonServiceName}": ${ao.ambiguousReason || 'Confirme se é complemento opcional ou pacote obrigatório.'}`
           });
         }
+        const scopeMode = ao.baseOptionScopeMode || (ao.baseOptionScopeUnclear ? 'undecided' : (Array.isArray(ao.acceptedBasePriceKeys) && ao.acceptedBasePriceKeys.length > 0 ? 'selected' : 'all'));
+        const selectedScopeKeys = Array.isArray(ao.acceptedBasePriceKeys) ? ao.acceptedBasePriceKeys.filter(Boolean) : [];
+        if (ao.baseOptionScopeUnclear || scopeMode === 'undecided' || (scopeMode === 'selected' && selectedScopeKeys.length === 0)) {
+          hasServiceIssue = true;
+          alerts.push({
+            id: `addon-scope-${row.key}-${ai}`,
+            scope: 'service',
+            recordKey: row.key,
+            recordName: row.name || 'Serviço',
+            section: 'addons',
+            severity: addonSeverity,
+            message: `${row.name || 'Serviço'} · Complemento "${ao.label || ao.addonServiceName}": Em quais planos este acompanhamento poderá ser contratado? Selecione os planos autorizados ou confirme se vale para todos.`
+          });
+        }
         const resolvedExisting = ao.addonServiceRef && ao.addonServiceRef.startsWith('existing:')
           ? catalog.services.find(s => s.active && s.id === ao.addonServiceRef.slice(9))
           : (!ao.addonServiceRef
@@ -806,8 +822,12 @@ function commercialOptions(row: ProposedService, type: string) {
   const isStandalone = (p: ProposedPrice) => p.unit === 'per_session' && !p.duration && !p.frequencyType && (!p.paymentPeriod || p.paymentPeriod === 'one_time');
   const standalone = proposals.filter(isStandalone);
   if (standalone.length > 1) throw catalogError('Deixe apenas um valor avulso por aula.');
-  const options = proposals.filter(p => !isStandalone(p)).map(p => {
-    const limitedAccess = row.type === 'access_limited' || p.frequencyType === 'weekly' || p.frequencyType === 'monthly';
+  const priceKeyToOptionId = new Map<string, string>();
+  const planProposals = proposals.filter(p => !isStandalone(p));
+  const options = planProposals.map((p, idx) => {
+    const limitedAccess = p.frequencyType === 'unlimited'
+      ? false
+      : (p.frequencyType === 'weekly' || p.frequencyType === 'monthly' || row.type === 'access_limited');
     const accessType = type === 'facility_access' ? (limitedAccess ? 'limited' : 'unlimited') : 'scheduled';
     const frequencyType = p.frequencyType || (accessType === 'unlimited' ? 'unlimited' : null);
     if (!p.duration || !p.paymentPeriod || !frequencyType ||
@@ -831,8 +851,11 @@ function commercialOptions(row: ProposedService, type: string) {
     if (accessType === 'limited' && (frequencyType === 'unlimited' || (frequencyType === 'weekly' && (p.frequencyCount || 0) > 50))) {
       throw catalogError('Confirme a frequência do acesso limitado. O cadastro aceita até 50 entradas por semana.');
     }
+    const optId = randomUUID();
+    const pKey = p.key || `p${idx + 1}`;
+    priceKeyToOptionId.set(pKey, optId);
     return {
-      id: randomUUID(), label: p.label || null, accessType, frequencyType, frequencyCount: p.frequencyCount,
+      id: optId, label: p.label || null, accessType, frequencyType, frequencyCount: p.frequencyCount,
       contractDurationCode: p.duration, paymentPeriodicity: p.paymentPeriod, commercialUnit: p.unit,
       amountCents: p.amountCents, installmentsCount: p.installments || 1, participantsCount: p.participants || (row.type === 'duo' ? 2 : 1),
       creditMode: p.creditMode || row.planCreditMode || null,
@@ -842,11 +865,17 @@ function commercialOptions(row: ProposedService, type: string) {
   if (standalone.length && (type === 'facility_access' || type === 'non_scheduled')) {
     throw catalogError('Este serviço não tem aulas avulsas. Cadastre o valor como opção comercial.');
   }
-  return { basePrice: standalone[0]?.amountCents ? standalone[0].amountCents / 100 : undefined, options: normalizeCommercialPriceOptions(options) };
+  return {
+    basePrice: standalone[0]?.amountCents ? standalone[0].amountCents / 100 : undefined,
+    options: normalizeCommercialPriceOptions(options, { studioServiceType: type }),
+    priceKeyToOptionId
+  };
 }
 
 function mergeCommercialOptions(existing: CatalogService, additions: ReturnType<typeof commercialOptions>) {
-  const current = normalizeCommercialPriceOptions(existing.commercial_price_options_json);
+  const current = normalizeCommercialPriceOptions(existing.commercial_price_options_json, {
+    studioServiceType: existing.studio_service_type
+  });
   const signature = (p: typeof current[number]) => JSON.stringify([
     p.accessType, p.frequencyType, p.frequencyCount, p.contractDurationCode, p.paymentPeriodicity, p.commercialUnit, p.participantsCount, p.installmentsCount, p.modality
   ]);
@@ -855,7 +884,14 @@ function mergeCommercialOptions(existing: CatalogService, additions: ReturnType<
     if (matches.some(old => old.amountCents !== option.amountCents)) {
       throw catalogError('Já existe um preço para a mesma condição comercial. Remova essa opção da importação para preservar o preço cadastrado.');
     }
-    if (!matches.length) current.push(option);
+    if (!matches.length) {
+      current.push(option);
+    } else {
+      // Se já existia opção equivalente, redireciona o mapa de priceKey -> ID existente
+      for (const [k, v] of additions.priceKeyToOptionId.entries()) {
+        if (v === option.id) additions.priceKeyToOptionId.set(k, matches[0].id);
+      }
+    }
   }
   return current;
 }
@@ -982,6 +1018,30 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
   const ignoredServices: ImportIgnoredItem[] = [];
   const ignoredPackages: ImportIgnoredItem[] = [];
   const references = new Map(catalog.services.filter(s => s.active).map(s => ['existing:' + s.id, s.id]));
+  const priceKeyMapsByServiceKey = new Map<string, Map<string, string>>();
+
+  // Pré-validação atômica de complementos opcionais antes de gravar qualquer serviço na Passagem 1
+  for (const row of proposal.services) {
+    if (row.action === 'ignore' || row.action === 'link') continue;
+    if (row.action === 'update' && !row.apply.includes('addons')) continue;
+    const rawAddons = Array.isArray(row.optionalAddons) ? row.optionalAddons.filter(a => a && a.active !== false) : [];
+    for (const ao of rawAddons) {
+      if (ao.mandatoryUnclear) {
+        throw catalogError(`${row.name || 'Serviço sem nome'} — Confirme se o item "${ao.label || ao.addonServiceName}" é complemento opcional ou pacote obrigatório antes de aplicar.`);
+      }
+      const scopeMode = ao.baseOptionScopeMode || (ao.baseOptionScopeUnclear ? 'undecided' : (Array.isArray(ao.acceptedBasePriceKeys) && ao.acceptedBasePriceKeys.length > 0 ? 'selected' : 'all'));
+      const rawScopeKeys = Array.isArray(ao.acceptedBasePriceKeys) ? ao.acceptedBasePriceKeys.filter(Boolean) : [];
+      if (ao.baseOptionScopeUnclear || scopeMode === 'undecided' || (scopeMode === 'selected' && rawScopeKeys.length === 0)) {
+        throw catalogError(`${row.name || 'Serviço sem nome'} — Em quais planos o complemento "${ao.label || ao.addonServiceName}" poderá ser contratado? Selecione os planos autorizados na revisão antes de confirmar.`);
+      }
+      if (ao.additionalPriceCents === null || ao.additionalPriceCents < 0) {
+        throw catalogError(`${row.name || 'Serviço sem nome'} — Informe o valor adicional do complemento "${ao.label || ao.addonServiceName}".`);
+      }
+      if (ao.attendanceFormat === 'group' && (!ao.sessionCapacity || Number(ao.sessionCapacity) < 2)) {
+        throw catalogError(`${row.name || 'Serviço sem nome'} — Informe a capacidade de vagas por horário (mínimo 2) para o complemento "${ao.label || ao.addonServiceName}".`);
+      }
+    }
+  }
 
   for (const row of proposal.services) {
     if (row.action === 'ignore') {
@@ -1174,7 +1234,10 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
         if (row.planCreditMode) body.planCreditMode = row.planCreditMode;
         if (row.planCreditsPerCycle !== undefined) body.planCreditsPerCycle = row.planCreditsPerCycle;
       }
-      if (prices) body.commercialPriceOptions = current ? mergeCommercialOptions(current, prices) : prices.options;
+      if (prices) {
+        body.commercialPriceOptions = current ? mergeCommercialOptions(current, prices) : prices.options;
+        priceKeyMapsByServiceKey.set(row.key, prices.priceKeyToOptionId);
+      }
       if (adjustments?.length) {
         const previous = normalizeStudioPriceAdjustments(current?.pricing_adjustments_json);
         const signature = (a: typeof previous[number]) => JSON.stringify([a.adjustmentType, a.valueType, a.amount, a.incidence, a.weekdays || [], a.startTime || '', a.endTime || '']);
@@ -1240,6 +1303,11 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
         if (ao.mandatoryUnclear) {
           throw catalogError(`Confirme se o item "${ao.label || ao.addonServiceName}" é complemento opcional ou pacote obrigatório antes de aplicar.`);
         }
+        const scopeMode = ao.baseOptionScopeMode || (ao.baseOptionScopeUnclear ? 'undecided' : (Array.isArray(ao.acceptedBasePriceKeys) && ao.acceptedBasePriceKeys.length > 0 ? 'selected' : 'all'));
+        const rawScopeKeys = Array.isArray(ao.acceptedBasePriceKeys) ? ao.acceptedBasePriceKeys.filter(Boolean) : [];
+        if (ao.baseOptionScopeUnclear || scopeMode === 'undecided' || (scopeMode === 'selected' && rawScopeKeys.length === 0)) {
+          throw catalogError(`Em quais planos o complemento "${ao.label || ao.addonServiceName}" poderá ser contratado? Selecione os planos autorizados na revisão antes de confirmar.`);
+        }
         if (ao.additionalPriceCents === null || ao.additionalPriceCents < 0) {
           throw catalogError(`Informe o valor adicional do complemento "${ao.label || ao.addonServiceName}".`);
         }
@@ -1272,7 +1340,13 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
         }
         const freqType = ao.frequencyType || 'weekly';
         const freqCount = freqType === 'unlimited' ? null : (ao.frequencyCount || 1);
-        const creditsPerCycle = freqType === 'unlimited'
+        const addonCreditMode =
+          freqType === 'unlimited'
+            ? 'unlimited'
+            : (ao.creditMode === 'weekly_guaranteed' || ao.creditMode === 'fixed_credits' || ao.creditMode === 'unlimited'
+                ? ao.creditMode
+                : 'fixed_credits');
+        const creditsPerCycle = freqType === 'unlimited' || addonCreditMode === 'weekly_guaranteed' || addonCreditMode === 'unlimited'
           ? null
           : (ao.creditsPerCycle !== null && ao.creditsPerCycle !== undefined
               ? ao.creditsPerCycle
@@ -1310,6 +1384,32 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
           ? [...new Set(ao.allowedWeekdays.map(Number).filter(d => Number.isInteger(d) && d >= 0 && d <= 6))].sort((a, b) => a - b)
           : [];
 
+        // Mapeia chaves selecionadas (ex.: 'p4' ou 'existing-opt:<id>') para IDs estáveis reais das opções comerciais salvas
+        const priceKeyMap = priceKeyMapsByServiceKey.get(row.key) || new Map<string, string>();
+        const savedBaseCommOpts = normalizeCommercialPriceOptions(baseRow?.commercial_price_options_json, {
+          studioServiceType: baseRow?.studio_service_type
+        });
+        const validBaseOptIds = new Set(savedBaseCommOpts.map(o => o.id));
+        const resolvedAcceptedBaseOptionIds =
+          scopeMode === 'selected'
+            ? Array.from(
+                new Set(
+                  rawScopeKeys
+                    .map((k) => {
+                      const clean = String(k || '').trim();
+                      if (clean.startsWith('existing-opt:')) return clean.slice(13);
+                      if (priceKeyMap.has(clean)) return priceKeyMap.get(clean)!;
+                      if (validBaseOptIds.has(clean)) return clean;
+                      return '';
+                    })
+                    .filter((id) => Boolean(id) && (validBaseOptIds.size === 0 || validBaseOptIds.has(id)))
+                )
+              )
+            : [];
+        if (scopeMode === 'selected' && resolvedAcceptedBaseOptionIds.length === 0) {
+          throw catalogError(`Nenhum plano-base válido foi selecionado para o complemento "${ao.label || ao.addonServiceName}".`);
+        }
+
         const newOpt: StudioOptionalAddonOption = {
           id: ao.id || `addon-${randomUUID().slice(0, 8)}`,
           addonServiceId: targetId,
@@ -1319,9 +1419,11 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
           description: null,
           active: true,
           allowPublicBooking: ao.allowPublicBooking !== false,
-          acceptedBaseOptionIds: [],
+          acceptedBaseOptionIds: resolvedAcceptedBaseOptionIds,
+          baseOptionRestrictionMode: scopeMode === 'selected' ? 'selected' : 'all',
           frequencyType: freqType,
           frequencyCount: freqCount,
+          creditMode: addonCreditMode,
           creditsPerCycle,
           additionalPriceCents: ao.additionalPriceCents,
           comboDiscountType: ao.comboDiscountType || 'none',
@@ -1346,10 +1448,25 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
       }
 
       if (mergedOptions.length > 0) {
+        const distinctTargetServices = new Set(mergedOptions.map(o => o.addonServiceId));
+        const hasRestrictedAddon = mergedOptions.some(o => o.baseOptionRestrictionMode === 'selected');
+        const allAllowedBaseOptIds = new Set(mergedOptions.flatMap(o => o.acceptedBaseOptionIds || []));
+        const currentSavedBaseOpts = normalizeCommercialPriceOptions(baseRow?.commercial_price_options_json, {
+          studioServiceType: baseRow?.studio_service_type
+        });
+        const updatedBaseCommercialOpts =
+          hasRestrictedAddon && currentSavedBaseOpts.length > 0
+            ? currentSavedBaseOpts.map((co) => ({
+                ...co,
+                allowOptionalAddons: allAllowedBaseOptIds.has(co.id)
+              }))
+            : undefined;
+
         saveService(req, {
+          ...(updatedBaseCommercialOpts ? { commercialPriceOptions: updatedBaseCommercialOpts } : {}),
           optionalAddons: {
             enabled: true,
-            allowMultiple: existingCfg.allowMultiple || mergedOptions.length > 1,
+            allowMultiple: existingCfg.allowMultiple || distinctTargetServices.size > 1,
             promptTitle: existingCfg.promptTitle || 'Deseja adicionar acompanhamento personalizado?',
             noAddonLabel: existingCfg.noAddonLabel || 'Não adicionar',
             options: mergedOptions

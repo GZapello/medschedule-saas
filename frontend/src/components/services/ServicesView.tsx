@@ -1896,9 +1896,14 @@ export const ServicesView: React.FC = () => {
             {/* Conteúdo com Scroll */}
             <ServiceFormBody>
               <ServiceFormSection section="basics">
+              {showCreateStudioConfig && studioServiceType === 'facility_access' ? (
+                <div className="p-3 rounded-xl bg-teal-50/70 border border-teal-200 text-[11px] text-teal-900">
+                  <strong>Plano de Acesso à Academia (sem agenda / sem instrutor obrigatório):</strong> este serviço não exige profissional, módulo clínico, duração de atendimento ou buffer. Profissionais e horários são configurados nos serviços complementares (ex.: Acompanhamento Personal).
+                </div>
+              ) : (
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Profissional Responsável {showCreateStudioConfig && (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled') ? '(Opcional)' : '*'}
+                  Profissional Responsável {showCreateStudioConfig && studioServiceType === 'non_scheduled' ? '(Opcional)' : '*'}
                 </label>
                 <select
                   data-studio-field={isPureStudio ? "professional" : undefined}
@@ -1906,10 +1911,10 @@ export const ServicesView: React.FC = () => {
                   value={professionalId}
                   onChange={e => handleSelectProfessional(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium cursor-pointer"
-                  required={!showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')}
+                  required={!showCreateStudioConfig || studioServiceType !== 'non_scheduled'}
                 >
                   <option value="">
-                    {showCreateStudioConfig && (studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled')
+                    {showCreateStudioConfig && studioServiceType === 'non_scheduled'
                       ? 'Sem profissional específico (Geral da Academia & Studio)'
                       : 'Selecione o profissional...'}
                   </option>
@@ -1920,7 +1925,7 @@ export const ServicesView: React.FC = () => {
                   ))}
                 </select>
 
-                {showCreateStudioConfig && studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled' && (
+                {showCreateStudioConfig && studioServiceType !== 'non_scheduled' && (
                   <div className="mt-2">
                     <LinkedInstructorsSelector
                       professionals={professionals}
@@ -1931,6 +1936,7 @@ export const ServicesView: React.FC = () => {
                   </div>
                 )}
               </div>
+              )}
 
               {(!showCreateStudioConfig || (studioServiceType !== 'facility_access' && studioServiceType !== 'non_scheduled')) && (
                 <div>
@@ -2114,6 +2120,12 @@ export const ServicesView: React.FC = () => {
                         setAllowPublicSingleBooking(false);
                         setAllowPlanBooking(true);
                         setAllowPublicPlanBooking(true);
+                        setCommercialPriceOptions(prev =>
+                          prev.map(o => ({
+                            ...o,
+                            accessType: o.frequencyType === 'unlimited' ? 'unlimited' : 'limited'
+                          }))
+                        );
                       } else if (!professionalId && professionals.length > 0) {
                         handleSelectProfessional(professionals[0].id);
                         setDurationMinutes(prev => (prev > 0 ? prev : 50));
@@ -2489,9 +2501,14 @@ export const ServicesView: React.FC = () => {
             {/* Conteúdo com Scroll */}
             <ServiceFormBody>
               <ServiceFormSection section="basics">
+              {showEditStudioConfig && editStudioServiceType === 'facility_access' ? (
+                <div className="p-3 rounded-xl bg-teal-50/70 border border-teal-200 text-[11px] text-teal-900">
+                  <strong>Plano de Acesso à Academia (sem agenda / sem instrutor obrigatório):</strong> este serviço não exige profissional, módulo clínico, duração de atendimento ou buffer. Profissionais e horários são configurados nos serviços complementares (ex.: Acompanhamento Personal).
+                </div>
+              ) : (
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Profissional Responsável {showEditStudioConfig && (editStudioServiceType === 'facility_access' || editStudioServiceType === 'non_scheduled') ? '(Opcional)' : '*'}
+                  Profissional Responsável {showEditStudioConfig && editStudioServiceType === 'non_scheduled' ? '(Opcional)' : '*'}
                 </label>
                 <select
                   data-studio-field={isPureStudio ? "professional" : undefined}
@@ -2499,10 +2516,10 @@ export const ServicesView: React.FC = () => {
                   value={editProfessionalId}
                   onChange={e => handleSelectEditProfessional(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                  required={!showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled')}
+                  required={!showEditStudioConfig || editStudioServiceType !== 'non_scheduled'}
                 >
                   <option value="">
-                    {showEditStudioConfig && (editStudioServiceType === 'facility_access' || editStudioServiceType === 'non_scheduled')
+                    {showEditStudioConfig && editStudioServiceType === 'non_scheduled'
                       ? 'Sem profissional específico (Geral da Academia & Studio)'
                       : 'Selecione o profissional...'}
                   </option>
@@ -2513,7 +2530,7 @@ export const ServicesView: React.FC = () => {
                   ))}
                 </select>
 
-                {showEditStudioConfig && editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled' && (
+                {showEditStudioConfig && editStudioServiceType !== 'non_scheduled' && (
                   <div className="mt-2">
                     <LinkedInstructorsSelector
                       professionals={professionals}
@@ -2525,6 +2542,7 @@ export const ServicesView: React.FC = () => {
                   </div>
                 )}
               </div>
+              )}
 
               {(!showEditStudioConfig || (editStudioServiceType !== 'facility_access' && editStudioServiceType !== 'non_scheduled')) && (
                 <div>
@@ -2726,6 +2744,12 @@ export const ServicesView: React.FC = () => {
                         setEditAllowPublicSingleBooking(false);
                         setEditAllowPlanBooking(true);
                         setEditAllowPublicPlanBooking(true);
+                        setEditCommercialPriceOptions(prev =>
+                          prev.map(o => ({
+                            ...o,
+                            accessType: o.frequencyType === 'unlimited' ? 'unlimited' : 'limited'
+                          }))
+                        );
                       } else if (!editProfessionalId && professionals.length > 0) {
                         handleSelectEditProfessional(professionals[0].id);
                         setEditDurationMinutes(prev => (prev > 0 ? prev : 50));

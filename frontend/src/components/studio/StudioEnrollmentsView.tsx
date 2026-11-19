@@ -318,7 +318,7 @@ export const StudioEnrollmentsView: React.FC = () => {
   );
   const availableEnrollAddons = useMemo(() => {
     if (!enrollAddonsCfg.enabled) return [];
-    return enrollAddonsCfg.options.filter(opt => addonAppliesToBaseOption(opt, commercialOption?.id || null));
+    return enrollAddonsCfg.options.filter(opt => addonAppliesToBaseOption(opt, commercialOption));
   }, [enrollAddonsCfg, commercialOption]);
   const selectedEnrollAddons = useMemo(
     () => availableEnrollAddons.filter(opt => selectedAddonOptionIds.includes(opt.id)),
@@ -1981,6 +1981,14 @@ export const StudioEnrollmentsView: React.FC = () => {
                               )}
                               {ent.weekly_frequency_snapshot && ent.entitlement_type !== 'facility_access' && (
                                 <span className="text-slate-600">• Frequência: {ent.weekly_frequency_snapshot}x/sem</span>
+                              )}
+                              {isAddon && ent.addon_pricing?.durationMonths && (
+                                <span className="text-slate-600">
+                                  • Vigência do complemento: {ent.addon_pricing.durationMonths}{' '}
+                                  {Number(ent.addon_pricing.durationMonths) === 1 ? 'mês' : 'meses'}
+                                  {ent.addon_pricing.isIndependentDuration ? ' (independente)' : ''}
+                                  {ent.addon_pricing.endDate ? ` até ${formatBrDate(ent.addon_pricing.endDate)}` : ''}
+                                </span>
                               )}
                             </div>
 

@@ -21,13 +21,16 @@ interface AddonSchedulePickerBlockProps {
   tenantSlug: string;
   bookingSequence?: number;
   baseServiceId?: string | null;
+  baseCommercialOptionId?: string | null;
+  timeZone?: string | null;
   addon: StudioOptionalAddonOption;
   targetServiceMeta?: any;
   values: SelectedAddonSchedule[];
   onChange: (next: SelectedAddonSchedule[]) => void;
 }
 
-const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+const todayIso = (tz?: string | null) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'America/Sao_Paulo' }).format(new Date());
 
 const formatShortDate = (iso: string) => {
   if (!iso || iso.length < 10) return iso;
@@ -47,13 +50,15 @@ export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> =
   tenantSlug,
   bookingSequence,
   baseServiceId,
+  baseCommercialOptionId,
+  timeZone,
   addon,
   targetServiceMeta,
   values,
   onChange
 }) => {
   const requiredCount = getRequiredAddonSlotsCount(addon);
-  const [date, setDate] = useState<string>(() => todayIso());
+  const [date, setDate] = useState<string>(() => todayIso(timeZone));
   const [selectedProFilter, setSelectedProFilter] = useState<string>('any');
   const [availablePros, setAvailablePros] = useState<any[]>(() =>
     Array.isArray(targetServiceMeta?.linked_professionals) ? targetServiceMeta.linked_professionals : []
@@ -76,12 +81,13 @@ export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> =
     const seqParam = bookingSequence ? `&bookingSequence=${bookingSequence}` : '';
     const dateParam = date ? `&date=${encodeURIComponent(date)}` : '';
     const baseParam = baseServiceId ? `&baseServiceId=${encodeURIComponent(baseServiceId)}` : '';
+    const baseOptParam = baseCommercialOptionId ? `&baseCommercialOptionId=${encodeURIComponent(baseCommercialOptionId)}` : '';
     const optParam = `&addonOptionId=${encodeURIComponent(addon.id)}`;
     const proParam = selectedProFilter && selectedProFilter !== 'any'
       ? `&professionalId=${encodeURIComponent(selectedProFilter)}`
       : '';
     ApiClient.get<any>(
-      `/v1/public/studio/slots?tenantSlug=${encodeURIComponent(tenantSlug)}${seqParam}&serviceId=${encodeURIComponent(addon.addonServiceId)}${baseParam}${optParam}${proParam}${dateParam}&includeUpcoming=1&includeWeekly=0`
+      `/v1/public/studio/slots?tenantSlug=${encodeURIComponent(tenantSlug)}${seqParam}&serviceId=${encodeURIComponent(addon.addonServiceId)}${baseParam}${baseOptParam}${optParam}${proParam}${dateParam}&includeUpcoming=1&includeWeekly=0`
     )
       .then((res) => {
         if (cancelled) return;
@@ -102,7 +108,7 @@ export const AddonSchedulePickerBlock: React.FC<AddonSchedulePickerBlockProps> =
     return () => {
       cancelled = true;
     };
-  }, [tenantSlug, bookingSequence, baseServiceId, addon.id, addon.addonServiceId, selectedProFilter, date]);
+  }, [tenantSlug, bookingSequence, baseServiceId, baseCommercialOptionId, addon.id, addon.addonServiceId, selectedProFilter, date]);
 
   const handleToggleSlot = (slotObj: any) => {
     if (slotObj?.isFull) return;
