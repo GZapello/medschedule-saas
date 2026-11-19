@@ -2543,6 +2543,14 @@ export class StudioAccessService {
   /**
    * Detalhamento completo de uma matrícula / contrato (aluno, regras, créditos/aulas, pagamentos e histórico).
    */
+  static manualReceiptBlock(payment: { status: string; source_type?: string | null; transaction_id?: string | null }): string | null {
+    if (payment.status !== 'pending') return 'Somente cobranças pendentes podem receber baixa integral.';
+    if (payment.transaction_id || (payment.source_type && !['package_contract', 'recurring_plan'].includes(payment.source_type))) {
+      return 'Esta cobrança deve ser liquidada pelo fluxo de origem.';
+    }
+    return null;
+  }
+
   static getEnrollmentDetail(tenantId: string, contractId: string): any | null {
     this.ensureStudioCompatible(tenantId);
     const listRes = this.listEnrollments(tenantId);
@@ -2558,7 +2566,7 @@ export class StudioAccessService {
 
     const payments = db.prepare(`
       SELECT id, amount, base_amount, status, due_date, payment_date, payment_method,
-             competence_month, installment_number, total_installments, notes, created_at
+             source_type, transaction_id, competence_month, installment_number, total_installments, notes, created_at
       FROM payments
       WHERE tenant_id = ?
         AND (${enrollment.contractSource === 'package_contract' ? 'package_contract_id = ?' : 'recurring_plan_id = ?'})
@@ -2665,7 +2673,9 @@ export class StudioAccessService {
       entitlements: enrollment.entitlements || [],
       availableAddons,
       appointments,
-      payments,
+      payments: payments.map(({ transaction_id, source_type, ...payment }) => ({
+        ...payment, manualReceiptBlock: this.manualReceiptBlock({ status: payment.status, transaction_id, source_type })
+      })),
       history
     };
   }

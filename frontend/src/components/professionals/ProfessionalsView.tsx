@@ -19,7 +19,7 @@ import {
   DollarSign,
   AlertTriangle
 } from 'lucide-react';
-import { formatDoctorName } from '../../utils/formatters';
+import { formatDoctorName, formatStudioProfessionalName } from '../../utils/formatters';
 
 const getCouncilForProfession = (prof?: Profession | null, profNameOrId?: string): string => {
   if (prof?.registration_board_label) return prof.registration_board_label;
@@ -46,6 +46,7 @@ const getCouncilForProfession = (prof?: Profession | null, profNameOrId?: string
 export const ProfessionalsView: React.FC = () => {
   const { showToast } = useToast();
   const { reloadSession, currentTenant, isClinicAdmin } = useAuth();
+  const professionalName = currentTenant?.establishment_profile === 'studio' ? formatStudioProfessionalName : formatDoctorName;
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [professions, setProfessions] = useState<Profession[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -218,7 +219,7 @@ export const ProfessionalsView: React.FC = () => {
 
               <div className="mt-3">
                 <h3 className="font-bold text-slate-900 text-base">
-                  {formatDoctorName(p.name, (p as any).gender)}
+                  {professionalName(p.name, (p as any).gender)}
                 </h3>
                 <p className="text-xs text-indigo-600 font-semibold">{p.specialty_name || p.profession_name}</p>
                 {p.registration_number && (

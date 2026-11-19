@@ -42,8 +42,13 @@ async function main() {
       const page = await browser.newPage({ viewport: { width, height: 960 } });
       const sources = [{ id: 1, fileName: 'precos-pilates.csv', copies: 1 }];
       const catalog = { services: [], packages: [], professionals: [
-        { id: 'p-ana', name: 'Ana Ribeiro' }, { id: 'p-bia', name: 'Bia' }
+        { id: 'p-ana', name: 'Ana Ribeiro', professionName: 'Fisioterapeuta', isStudioEligible: true }, { id: 'p-bia', name: 'Bia' }
       ] };
+      for (const pro of catalog.professionals) {
+        pro.workShifts = [3, 5].map(dayOfWeek => ({ dayOfWeek, startTime: '18:00', endTime: '20:00' }));
+        pro.scheduleSummary = 'Qua e Sex 18:00–20:00';
+        pro.linkedServiceIds = [];
+      }
       const proposal = normalizeProposal({
         services: [{
           name: 'Pilates Individual', type: 'individual', activity: 'Pilates', modality: 'presential',
@@ -67,7 +72,7 @@ async function main() {
           assert.deepEqual(payload.files.map(f => f.fileName), ['precos-pilates.csv']);
           assert.ok(payload.files[0].base64);
           await new Promise(resolve => setTimeout(resolve, 250));
-          draft = { id: 'fixture', revision: 1, result: null, proposal, sources, catalog, matches: { services: {}, packages: {} } };
+          draft = { id: 'fixture', status: 'ready', revision: 1, result: null, proposal, sources, catalog, matches: { services: {}, packages: {} } };
           response = draft;
         } else if (pathname.endsWith('/confirm')) {
           const payload = request.postDataJSON();
@@ -91,10 +96,13 @@ async function main() {
         } else if (pathname.endsWith('/fixture')) {
           response = draft;
         } else {
-          response = draft && !draft.result ? [{ id: draft.id, sources, updatedAt: '2026-11-18' }] : [];
+          response = draft && !draft.result ? [{ id: draft.id, status: 'ready', sources, updatedAt: '2026-11-18' }] : [];
         }
         await route.fulfill({ json: response });
       });
+      page.setDefaultTimeout(8000);
+      page.on('pageerror', err => console.error('Browser error:', err.message));
+      await page.route('**/v1/services', r => r.fulfill({ json: [{ id: 'srv-fixture' }] }));
       await page.goto('http://127.0.0.1:' + server.address().port);
       await page.locator('input[type=file]').setInputFiles([
         { name: 'precos-pilates.csv', mimeType: 'text/csv', buffer: Buffer.from('Frequência,Valor\n2,480') },
@@ -102,18 +110,22 @@ async function main() {
       ]);
       await page.getByRole('button', { name: 'Remover ignorar.csv' }).click();
       if (width === 1440) await page.screenshot({ path: path.join(output, '01-arquivos.png'), fullPage: true });
-      await page.getByRole('button', { name: 'Analisar com IA' }).click();
-      await page.getByText('Analisando os arquivos com IA…').waitFor();
+      await page.getByRole('button', { name: 'Analisar catálogo com IA' }).click();
+      await page.getByRole('heading', { name: 'Revisar catálogo extraído' }).waitFor();
       await page.getByText('Pilates Individual', { exact: true }).click();
       const serviceSummary = page.getByRole('region', { name: 'Serviços identificados' }).locator('summary');
       assert.ok(await serviceSummary.getByText('Precisa de confirmação', { exact: true }).isVisible());
-      assert.ok(await page.getByRole('button', { name: 'Confirmar importação', exact: true }).isDisabled());
+      assert.ok(await page.getByRole('button', { name: 'Revisar prévia e importar', exact: true }).isDisabled());
       await page.getByLabel('Ação para este serviço').selectOption('create');
-      await page.getByLabel('Profissional responsável').selectOption('p-ana');
+      const responsible = page.getByLabel('Profissional responsável');
+      assert.match(await responsible.locator('option[value="p-ana"]').innerText(), /Ana Ribeiro · Fisioterapeuta/);
+      await responsible.selectOption('p-ana');
+      await page.getByRole('button', { name: /^Horários \(/ }).click();
       const instructors = page.getByLabel('Profissional do horário');
       await instructors.first().selectOption('p-bia');
       await instructors.first().selectOption({ label: 'Usar responsável (Ana Ribeiro)' });
       await instructors.nth(1).selectOption('p-bia');
+      await page.getByRole('button', { name: /^Planos & Preços/ }).click();
       await page.getByLabel('O que o valor representa').selectOption('per_month');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       if (width === 390) await page.screenshot({ path: path.join(output, '02-revisao-mobile.png'), fullPage: true });
@@ -123,13 +135,13 @@ async function main() {
       await page.getByLabel('Frequência semanal do componente').fill('2');
       await page.getByLabel('Limite mensal do componente').fill('8');
       await page.getByRole('button', { name: 'Salvar rascunho' }).click();
-      await page.getByText('Rascunho salvo.', { exact: false }).waitFor();
+      await page.getByText('Rascunho salvo com diagnóstico atualizado.', { exact: false }).waitFor();
       await page.reload();
       await page.getByRole('button', { name: 'precos-pilates.csv' }).click();
-      await page.getByRole('button', { name: 'Confirmar importação', exact: true }).click();
+      await page.getByRole('button', { name: 'Revisar prévia e importar', exact: true }).click();
       assert.equal(confirmations, 0);
-      await page.getByRole('button', { name: 'Confirmar e cadastrar', exact: true }).click();
-      await page.getByRole('heading', { name: 'Importação concluída' }).waitFor();
+      await page.getByRole('button', { name: 'Confirmar e gravar no catálogo', exact: true }).click();
+      await page.getByRole('heading', { name: /Importação concluída/ }).waitFor();
       assert.equal(confirmations, 1);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       if (width === 1440) await page.screenshot({ path: path.join(output, '03-confirmacao.png'), fullPage: true });

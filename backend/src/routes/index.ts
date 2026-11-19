@@ -374,6 +374,8 @@ api.post('/v1/services/frequency-meetings', requireTenant, requirePermissionOrRo
 api.post('/v1/services/quote-commercial', requireTenant, ServiceController.quoteCommercial);
 api.post('/v1/services/:id/quote-commercial', requireTenant, ServiceController.quoteCommercial);
 api.post('/v1/services', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.create);
+api.get('/v1/services/:id/history', requireTenant, requireStudioEstablishment, requireRole('clinic_admin', 'professional', 'receptionist'), ServiceController.studioHistory);
+api.post('/v1/services/:id/reactivate', requireTenant, requireStudioEstablishment, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.reactivateStudioService);
 api.put('/v1/services/:id', requireTenant, requirePermissionOrRole('manage_services', 'clinic_admin'), ServiceController.update);
 api.delete('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.delete);
 api.get('/v1/services/:serviceId/class-schedules', requireTenant, requireStudioEstablishment, ClassScheduleController.list);

@@ -1,3 +1,4 @@
+import { formatStudioProfessionalName } from '../../utils/formatters';
 import { useIndividualFrequencyMeetings } from './useIndividualFrequencyMeetings';
 import { FrequencyPricing, emptyFrequencyPricing, readFrequencyPricing, offeredWeeklyMeetings, supportsFrequencyPricing } from '../../utils/studioFrequencyPricing';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -345,7 +346,7 @@ export const getCompatibleSpecialties = (
 
 export const ServicesView: React.FC = () => {
   const { showToast } = useToast();
-  const { currentUser, currentTenant, isZemdaEstetic, userPermissions } = useAuth();
+  const { currentUser, currentTenant, isZemdaEstetic, userPermissions, isClinicAdmin, hasPermission } = useAuth();
   const establishmentProfile = normalizeEstablishmentProfile(currentTenant?.establishment_profile);
   const isStudioCompatible = supportsStudioFeatures(establishmentProfile);
   const isMixed = isMixedProfile(establishmentProfile);
@@ -607,7 +608,7 @@ export const ServicesView: React.FC = () => {
         setPackages([]);
       }
       const profList = Array.isArray(profs) ? profs : [];
-      setProfessionals(profList);
+      setProfessionals(isPureStudio ? profList.map(p => ({ ...p, name: formatStudioProfessionalName(p.name) })) : profList);
       if (profList.length > 0 && (!professionalId || !profList.some(p => p.id === professionalId))) {
         setProfessionalId(profList[0].id);
         setLinkedProfessionalIds([profList[0].id]);
@@ -628,6 +629,9 @@ export const ServicesView: React.FC = () => {
     setPackages([]);
     setPackagesError(null);
     setSelectedProfFilter('all');
+    setCatalogTab('active');
+    setCatalogSearch('');
+    setServiceHistory(null);
   }, [currentTenant?.id]);
 
   useEffect(() => {
@@ -1212,6 +1216,33 @@ export const ServicesView: React.FC = () => {
     }
   };
 
+  const [catalogTab, setCatalogTab] = useState<'active' | 'inactive'>('active');
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [serviceHistory, setServiceHistory] = useState<{ id: string; events: { action: string; created_at: string; actor: string | null }[] } | null>(null);
+  const archiveStudioService = serviceToDelete && isStudioCompatible && resolveServiceDomain({
+    establishmentProfile, serviceDomain: serviceToDelete.service_domain, serviceKind: serviceToDelete.service_kind,
+    clinicalModule: serviceToDelete.clinical_module
+  }) === 'studio';
+  const catalogRows = useMemo(() => services.filter(s => {
+    if (!isStudioCompatible) return true;
+    const domain = resolveServiceDomain({ establishmentProfile, serviceDomain: s.service_domain, serviceKind: s.service_kind, clinicalModule: s.clinical_module });
+    if (domain !== 'studio') return catalogTab === 'active';
+    return Boolean(s.active) === (catalogTab === 'active') && s.name.toLocaleLowerCase().includes(catalogSearch.trim().toLocaleLowerCase());
+  }), [services, isStudioCompatible, establishmentProfile, catalogTab, catalogSearch]);
+  const showHistory = async (id: string) => {
+    try {
+      const events = await ApiClient.get<NonNullable<typeof serviceHistory>['events']>(`/v1/services/${id}/history`);
+      setServiceHistory({ id, events });
+    } catch (err) { showToast(err instanceof Error ? err.message : 'Erro ao consultar o histórico.', 'error'); }
+  };
+  const reactivateService = async (id: string) => {
+    try {
+      await ApiClient.post(`/v1/services/${id}/reactivate`, {});
+      await fetchData();
+      showToast('Serviço reativado.', 'success');
+    } catch (err) { showToast(err instanceof Error ? err.message : 'Erro ao reativar o serviço.', 'error'); }
+  };
+
   // Agrupamento dos serviços por profissional
   const groupedServices = useMemo(() => {
     const profMap = new Map<string, Professional>();
@@ -1224,7 +1255,7 @@ export const ServicesView: React.FC = () => {
         profId: selectedProfFilter,
         profName: prof?.name || 'Profissional',
         professionName: prof?.profession_name || '',
-        items: services.filter(
+        items: catalogRows.filter(
           s => s.professional_id === selectedProfFilter || s.linked_professional_ids?.includes(selectedProfFilter)
         )
       }];
@@ -1239,7 +1270,7 @@ export const ServicesView: React.FC = () => {
     }> = [];
 
     for (const prof of professionals) {
-      const profServices = services.filter(s => s.professional_id === prof.id);
+      const profServices = catalogRows.filter(s => s.professional_id === prof.id);
       groups.push({
         profId: prof.id,
         profName: prof.name,
@@ -1249,7 +1280,7 @@ export const ServicesView: React.FC = () => {
     }
 
     // Serviços sem profissional atribuído (planos gerais de academia ou serviços sem instrutor)
-    const unassigned = services.filter(s => !s.professional_id || !profMap.has(s.professional_id));
+    const unassigned = catalogRows.filter(s => !s.professional_id || !profMap.has(s.professional_id));
     if (unassigned.length > 0) {
       groups.push({
         profId: null,
@@ -1260,7 +1291,7 @@ export const ServicesView: React.FC = () => {
     }
 
     return groups;
-  }, [services, professionals, selectedProfFilter, isStudioCompatible]);
+  }, [catalogRows, professionals, selectedProfFilter, isStudioCompatible]);
 
   const selectableCreateScheduleProfessionals = useMemo(() => {
     const activeIds = new Set([professionalId, ...linkedProfessionalIds].filter(Boolean));
@@ -1352,6 +1383,15 @@ export const ServicesView: React.FC = () => {
           )}
         </div>
 
+        {isStudioCompatible && <div className="flex flex-wrap items-center gap-2">
+          {(['active', 'inactive'] as const).map(tab => <button type="button" key={tab} aria-pressed={catalogTab === tab}
+            onClick={() => { setCatalogTab(tab); setServiceHistory(null); }}
+            className={`rounded-xl border px-3 py-1.5 text-sm font-semibold ${catalogTab === tab ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-700'}`}>
+            {tab === 'active' ? 'Ativos' : 'Desativados'}
+          </button>)}
+          <input aria-label="Buscar serviço no Studio" placeholder="Buscar serviço" value={catalogSearch} onChange={e => setCatalogSearch(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm" />
+        </div>}
         {/* Filtros e Seletores por Profissional */}
         {professionals.length > 1 && (
           <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs mobile-wrap">
@@ -1367,11 +1407,11 @@ export const ServicesView: React.FC = () => {
               <Users className="w-3.5 h-3.5" />
               <span>Todos os Profissionais</span>
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedProfFilter === 'all' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
-                {services.length}
+                {catalogRows.length}
               </span>
             </button>
             {professionals.map(p => {
-              const count = services.filter(
+              const count = catalogRows.filter(
                 s => s.professional_id === p.id || s.linked_professional_ids?.includes(p.id)
               ).length;
               const isSelected = selectedProfFilter === p.id;
@@ -1404,7 +1444,9 @@ export const ServicesView: React.FC = () => {
 
         {/* Listagem Separada por Seções de Profissionais */}
         <div className="space-y-6">
-          {groupedServices.map(group => (
+          {isStudioCompatible && catalogTab === 'inactive' && !groupedServices.some(g => g.items.length) &&
+            <p className="text-sm text-slate-500">Nenhum serviço desativado encontrado.</p>}
+          {groupedServices.filter(g => !isStudioCompatible || catalogTab === 'active' || g.items.length > 0).map(group => (
             <div key={group.profId || 'unassigned'} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">
@@ -1617,6 +1659,18 @@ export const ServicesView: React.FC = () => {
                           )}
                         </div>
 
+                        {isStudioCompatible && catalogTab === 'inactive' && <div className="space-y-2 text-xs">
+                          <div className="flex gap-3 font-semibold text-indigo-700">
+                            <button type="button" onClick={() => void showHistory(s.id)}>Histórico</button>
+                            {(isClinicAdmin || hasPermission('manage_services')) && <button type="button" onClick={() => void reactivateService(s.id)}>Reativar</button>}
+                          </div>
+                          {serviceHistory?.id === s.id && <ul aria-label="Histórico do serviço" className="space-y-1 text-slate-600">
+                            {serviceHistory.events.length === 0 && <li>Nenhum evento registrado.</li>}
+                            {serviceHistory.events.map((ev, i) => <li key={i}>{new Date(ev.created_at.replace(' ', 'T') + 'Z').toLocaleString('pt-BR')} · {({
+                              CREATE_SERVICE: 'Criado', UPDATE_SERVICE: 'Editado', INACTIVATE_SERVICE: 'Desativado', REACTIVATE_SERVICE: 'Reativado'
+                            } as Record<string, string>)[ev.action] || ev.action} · {ev.actor || 'Sistema'}</li>)}
+                          </ul>}
+                        </div>}
                         <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                           <div className="flex items-center gap-1 font-medium text-slate-700">
                             {s.studio_service_type === 'facility_access' ? (
@@ -3072,17 +3126,17 @@ export const ServicesView: React.FC = () => {
                 <AlertTriangle className="w-5 h-5 text-rose-600" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">Excluir Serviço</h3>
+                <h3 className="text-base font-bold text-slate-900">{archiveStudioService ? 'Desativar serviço' : 'Excluir Serviço'}</h3>
                 <p className="text-xs text-slate-500">Confirmação de segurança</p>
               </div>
             </div>
 
             <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
               <p>
-                Tem certeza de que deseja excluir o serviço <strong className="text-slate-900">{serviceToDelete.name}</strong>?
+                Tem certeza de que deseja {archiveStudioService ? 'desativar' : 'excluir'} o serviço <strong className="text-slate-900">{serviceToDelete.name}</strong>?
               </p>
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] leading-relaxed">
-                <strong>Atenção:</strong> Se o serviço já possuir vínculos históricos com agendamentos, atendimentos ou registros financeiros, ele será <strong>inativado com segurança</strong> para manter a integridade dos relatórios e prontuários.
+                {archiveStudioService ? 'O serviço ficará na aba Desativados, com os contratos, agendamentos e registros financeiros preservados.' : <><strong>Atenção:</strong> Se o serviço já possuir vínculos históricos com agendamentos, atendimentos ou registros financeiros, ele será <strong>inativado com segurança</strong> para manter a integridade dos relatórios e prontuários.</>}
               </div>
             </div>
 
@@ -3101,7 +3155,7 @@ export const ServicesView: React.FC = () => {
                 disabled={deleting}
                 className="px-5 py-2 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer"
               >
-                {deleting ? 'Processando...' : 'Confirmar Exclusão'}
+                {deleting ? 'Processando...' : archiveStudioService ? 'Desativar serviço' : 'Confirmar Exclusão'}
               </button>
             </div>
           </div>

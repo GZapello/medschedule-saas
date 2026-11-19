@@ -12,6 +12,7 @@ import {
   PAYMENT_PERIODICITY_LABELS,
   StudioCommercialPriceOption
 } from '../../utils/studioAccessAndCommercial';
+import { EnrollmentCharges } from './EnrollmentCharges';
 import { OptionalAddonsSelector } from './OptionalAddonsSelector';
 import { PlanWithAddonsBreakdownCard } from './PlanWithAddonsBreakdownCard';
 import {
@@ -99,6 +100,7 @@ const HISTORY_ACTION_LABELS: Record<string, string> = {
   CONTRACT_CHANGE_PLAN: 'Plano alterado',
   PACKAGE_CONTRACT_CHANGE_PLAN: 'Plano alterado',
   UPDATE_CONTRACT: 'Dados do contrato editados',
+  COLLECTION_MARK_PAID: 'Recebimento registrado',
   DELIVER_PACKAGE_ENTITLEMENT: 'Benefício entregue',
   DELIVER_ENTITLEMENT: 'Benefício entregue'
 };
@@ -821,13 +823,13 @@ export const StudioEnrollmentsView: React.FC = () => {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 items-start">
           {enrollments.map(enr => {
             const isAccess = enr.contractKind === 'access_plan' || enr.accessMode !== 'none';
             const isPkg = enr.contractSource === 'package_contract';
             return (
-              <div key={enr.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
+              <div key={enr.id} className="bg-white p-3 sm:p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col space-y-2">
+                <div className="space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -861,7 +863,7 @@ export const StudioEnrollmentsView: React.FC = () => {
                   </div>
 
                   {/* Resumo de Vigência, Acesso e Créditos */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 rounded-xl bg-slate-50 border border-slate-100 text-[11px]">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-2 gap-y-1 p-2 rounded-xl bg-slate-50 border border-slate-100 text-[11px]">
                     <div>
                       <span className="text-slate-400 block">Vigência</span>
                       <span className="font-bold text-slate-800">
@@ -904,10 +906,10 @@ export const StudioEnrollmentsView: React.FC = () => {
 
                   {/* Entregáveis / Benefícios do Plano Combinado ou Pacote */}
                   {Array.isArray(enr.entitlements) && enr.entitlements.length > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-                        {enr.hasAddons ? 'Benefícios do Contrato (Plano-base e Complementos)' : 'Benefícios do Pacote Combinado'}
-                      </div>
+                    <details className="space-y-1">
+                      <summary className="cursor-pointer text-xs font-semibold text-slate-600">
+                        {enr.hasAddons ? 'Benefícios do Contrato (Plano-base e Complementos)' : 'Benefícios do Pacote Combinado'} ({enr.entitlements.length})
+                      </summary>
                       <div className="flex flex-wrap gap-1.5">
                         {enr.entitlements.map((ent: any) => {
                           const isDeliv = ent.entitlement_type === 'deliverable';
@@ -998,13 +1000,15 @@ export const StudioEnrollmentsView: React.FC = () => {
                           );
                         })}
                       </div>
-                    </div>
+                    </details>
                   )}
                 </div>
 
                 {/* Ações do Ciclo de Vida */}
-                <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div className="flex flex-wrap items-center gap-1.5">
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <details className="min-w-0" hidden={!canManageContracts}>
+                    <summary className="cursor-pointer rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-700">Ações da matrícula</summary>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
                     {canManageContracts && enr.lifecycleCategory === 'requested' && (
                       <button
                         type="button"
@@ -1102,6 +1106,7 @@ export const StudioEnrollmentsView: React.FC = () => {
                     )}
                   </div>
 
+                  </details>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -2099,6 +2104,9 @@ export const StudioEnrollmentsView: React.FC = () => {
                         {formatCurrencyBRL(detailModal.enrollment?.amount)} ({formatBillingCycleLabel(detailModal.enrollment?.paymentPeriodicity, detailModal.enrollment?.billingFrequency, detailModal.enrollment?.installmentsCount)})
                       </span>
                     </div>
+                    {detailModal.enrollment?.totalContractAmount != null && <p className="text-xs text-slate-700">
+                      Total contratado <strong>{formatCurrencyBRL(detailModal.enrollment.totalContractAmount)}</strong>
+                    </p>}
                     {detailModal.enrollment?.commercialBreakdown && (
                       <PlanWithAddonsBreakdownCard
                         breakdown={detailModal.enrollment.commercialBreakdown}
@@ -2106,42 +2114,12 @@ export const StudioEnrollmentsView: React.FC = () => {
                         compact
                       />
                     )}
-                    {Array.isArray(detailModal.payments) && detailModal.payments.length > 0 ? (
-                      <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-44 overflow-y-auto">
-                        {detailModal.payments.map((pay: any) => {
-                          const st = String(pay.status || 'pending');
-                          const badgeCls =
-                            st === 'paid'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : st === 'cancelled' || st === 'refunded'
-                                ? 'bg-slate-100 text-slate-500 border-slate-200'
-                                : 'bg-amber-50 text-amber-800 border-amber-200';
-                          const stLabel = st === 'paid' ? 'Pago' : st === 'cancelled' ? 'Cancelado' : st === 'refunded' ? 'Estornado' : 'Pendente';
-                          return (
-                            <div key={pay.id} className="px-3 py-2 flex items-center justify-between gap-2 text-[11px]">
-                              <div>
-                                <div className="font-semibold text-slate-800">
-                                  {pay.notes || `Cobrança ${pay.competence_month || ''}`}
-                                  {pay.total_installments > 1 ? ` (${pay.installment_number}/${pay.total_installments})` : ''}
-                                </div>
-                                <div className="text-[10px] text-slate-400">
-                                  Vencimento: {formatBrDate(pay.due_date)}
-                                  {pay.payment_date ? ` • Pago em ${formatBrDate(pay.payment_date)}` : ''}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-bold text-slate-900">{formatCurrencyBRL(pay.amount)}</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeCls}`}>
-                                  {stLabel}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-500">Nenhuma cobrança registrada até o momento.</p>
-                    )}
+                    <EnrollmentCharges charges={detailModal.payments || []} enrollmentId={detailModal.enrollment.id}
+                      plan={detailModal.enrollment.title} student={detailModal.student?.fullName || detailModal.enrollment.studentName}
+                      phone={detailModal.student?.whatsapp || detailModal.student?.phone} studio={currentTenant?.trade_name || currentTenant?.name || 'Studio'}
+                      today={localYmd()} canReceive={detailModal.permissions?.canReceivePayment === true}
+                      refresh={async () => { await Promise.all([handleOpenDetail(detailModal.enrollment), fetchEnrollments()]); }} />
+
                   </div>
                 )}
 

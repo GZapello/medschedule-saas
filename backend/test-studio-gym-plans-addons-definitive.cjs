@@ -276,7 +276,9 @@ async function test(label, fn) {
           modality: 'presential',
           allowSingleBooking: true,
           allowPlanBooking: true,
-          allowPublicBooking: true,
+          allowPublicBooking: false,
+          allowPublicSingleBooking: false,
+          allowPublicPlanBooking: false,
           price: 90,
           billingMode: 'monthly',
           periodicPrice: 120,
@@ -456,6 +458,8 @@ async function test(label, fn) {
       const r = await req(server, 'GET', `/v1/public/tenants/${studio.slug}`);
       assert.equal(r.status, 200);
       const musc = r.data.services.find((s) => s.id === muscSrvId);
+      assert.ok(!r.data.services.some(s => s.id === personalSrvId));
+      assert.ok(r.data.addon_services.some(s => s.id === personalSrvId));
       assert.ok(musc, 'Musculação deve aparecer no catálogo público mesmo sem profissional vinculado');
       assert.equal(isServiceNonScheduledForPublic(musc), true);
       assert.ok(musc.commercial_price_options.every((o) => o.accessType === 'unlimited' || o.accessType === 'limited'));
@@ -1197,6 +1201,40 @@ async function test(label, fn) {
     });
 
     console.log('\n==============================================================================');
+    await test('Recebimento pelo Financeiro, autorização, isolamento e histórico', async () => {
+      const detailPath = `/v1/studio/enrollments/${combinedContractId}`;
+      const detail = (await req(server, 'GET', detailPath, authAdmin)).data;
+      const pay = detail.payments.find(p => p.status === 'pending');
+      assert.ok(pay);
+      const route = `/v1/financial/collections/${pay.id}/mark-paid`;
+      const body = { enrollmentId: combinedContractId, paymentMethod: 'cash', paymentDate: '2025-01-15', amountReceived: pay.amount, notes: 'Recebido na unidade' };
+      assert.equal((await req(server, 'POST', route, { ...authProf, body })).status, 403);
+      assert.equal((await req(server, 'POST', route, { ...authAdminB, body })).status, 404);
+      assert.equal((await req(server, 'POST', route, { ...authAdmin, body: { ...body, amountReceived: 10 } })).status, 400);
+      db.prepare("UPDATE payments SET transaction_id = 'external' WHERE id = ?").run(pay.id);
+      assert.equal((await req(server, 'POST', route, { ...authAdmin, body })).status, 409);
+      db.prepare('UPDATE payments SET transaction_id = NULL WHERE id = ?').run(pay.id);
+      assert.equal((await req(server, 'POST', route, { ...authAdmin, body })).status, 200);
+      assert.equal((await req(server, 'POST', route, { ...authAdmin, body })).status, 409);
+      const after = (await req(server, 'GET', detailPath, authAdmin)).data;
+      assert.equal(after.payments.length, detail.payments.length);
+      assert.deepEqual([after.payments[0].status, after.payments[0].payment_method, after.payments[0].payment_date], ['paid', 'cash', body.paymentDate]);
+      assert.equal(after.history.filter(h => h.action === 'COLLECTION_MARK_PAID' && h.created_by === studio.adminId).length, 1);
+    });
+
+    await test('Desativar e reativar preserva serviço, histórico e contratos do Studio', async () => {
+      const path = `/v1/services/${personalSrvId}`;
+      await req(server, 'DELETE', path, authAdmin);
+      assert.equal(db.prepare('SELECT active FROM services WHERE id = ?').get(personalSrvId).active, 0);
+      const pub = (await req(server, 'GET', `/v1/public/tenants/${studio.slug}`)).data;
+      assert.ok(!pub.addon_services.some(s => s.id === personalSrvId));
+      assert.equal((await req(server, 'POST', path + '/reactivate', authAdminB)).status, 404);
+      assert.equal((await req(server, 'POST', path + '/reactivate', authAdmin)).status, 200);
+      const history = (await req(server, 'GET', path + '/history', authAdmin)).data;
+      assert.ok(history.some(e => e.action === 'INACTIVATE_SERVICE'));
+      assert.ok(history.some(e => e.action === 'REACTIVATE_SERVICE'));
+      assert.equal((await req(server, 'GET', `/v1/studio/enrollments/${combinedContractId}`, authAdmin)).status, 200);
+    });
     console.log(` RESUMO DEFINITIVO: ${passed} PASSARAM | ${failed} FALHARAM`);
     console.log('==============================================================================');
     if (failed > 0) process.exitCode = 1;

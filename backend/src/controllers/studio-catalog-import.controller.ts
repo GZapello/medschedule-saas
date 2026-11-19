@@ -300,7 +300,7 @@ function responseFor(tenantId: string, draft: Draft) {
   return {
     ...statusResponseFor({ ...draft, status: effectiveStatus }),
     proposal,
-    catalog: { services, packages, professionals: catalog.professionals },
+    catalog: { services, packages, professionals: catalog.professionals, unavailable: catalog.unavailable },
     matches,
     diagnostics
   };

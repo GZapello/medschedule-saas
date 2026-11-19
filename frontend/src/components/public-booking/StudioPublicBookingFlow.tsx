@@ -905,11 +905,12 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
   );
 
   const availableOptionalAddons = useMemo(() => {
-    if (!optionalAddonsConfig.enabled) return [];
+    if (!selectedService || !optionalAddonsConfig.enabled) return [];
+    const baseOption = selectedCommercialOption || buildFallbackBaseCommercialOption(selectedService);
     return optionalAddonsConfig.options.filter(opt =>
-      addonAppliesToBaseOption(opt, selectedCommercialOption)
+      opt.allowPublicBooking !== false && addonAppliesToBaseOption(opt, baseOption)
     );
-  }, [optionalAddonsConfig, selectedCommercialOption]);
+  }, [optionalAddonsConfig, selectedCommercialOption, selectedService]);
 
   useEffect(() => {
     setSelectedAddonOptionIds(prev => {
@@ -1499,7 +1500,7 @@ export const StudioPublicBookingFlow: React.FC<StudioPublicBookingFlowProps> = (
                 tenantSlug={slugVal}
                 bookingSequence={bookingSequence}
                 baseServiceId={selectedServiceId}
-                baseCommercialOptionId={selectedCommercialOption?.id || null}
+                baseCommercialOptionId={selectedCommercialOption?.id || 'default'}
                 timeZone={clinic?.timezone || 'America/Sao_Paulo'}
                 addon={addon}
                 targetServiceMeta={addonTargetMetaMap.get(addon.addonServiceId)}

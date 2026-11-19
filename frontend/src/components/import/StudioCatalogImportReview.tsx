@@ -213,10 +213,7 @@ function ServiceEditor({
   const [bulkPriceUnit, setBulkPriceUnit] = useState<'per_month' | 'per_session' | 'per_participant' | 'contract_total'>('per_month');
 
   const scheduled = ['individual', 'duo', 'group'].includes(row.type || '');
-  const eligibleCatalogPros = draft.catalog.professionals.filter(
-    p => p.isStudioEligible !== false && (!p.isAdminManager || p.hasActiveSchedule)
-  );
-  const selectablePros = eligibleCatalogPros.length > 0 ? eligibleCatalogPros : draft.catalog.professionals;
+  const selectablePros = draft.catalog.professionals.filter(p => p.isStudioEligible !== false);
   const profOptions = selectablePros.map(p => [p.id, `${p.name}${p.professionName ? ` · ${p.professionName}` : ''} (${p.scheduleSummary})`] as const);
   const responsibleId = row.action === 'update' ? draft.catalog.services.find(s => s.id === row.existingId)?.professionalId : row.professionalId;
   const responsible = draft.catalog.professionals.find(p => p.id === responsibleId);
@@ -545,7 +542,11 @@ function ServiceEditor({
                           <div className="space-y-1">
                             <SelectField label="Profissional responsável" options={profOptions} value={row.professionalId}
                               onChange={professionalId => onChange({ professionalId: professionalId || '' })} />
-                            {!row.professionalId && row.suggestedProfessionalId && (
+                            {Boolean(draft.catalog.unavailable?.length) && <details className="text-xs text-slate-600">
+                              <summary className="cursor-pointer">Indisponíveis neste estabelecimento</summary>
+                              <ul>{draft.catalog.unavailable?.map((p, i) => <li key={i}>{p.name} — {p.reason}</li>)}</ul>
+                            </details>}
+                            {!row.professionalId && selectablePros.some(p => p.id === row.suggestedProfessionalId) && (
                               <button
                                 type="button"
                                 onClick={() => onChange({ professionalId: row.suggestedProfessionalId || '' })}
@@ -1531,9 +1532,9 @@ export function StudioCatalogImportReview({ draft, onChange }: { draft: ImportDr
               const cleanName = String(suggestedName || '').trim() || 'Acompanhamento Personal Trainer';
               const newKey = `svc-companion-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
               const eligiblePros = draft.catalog.professionals.filter(
-                p => p.isStudioEligible !== false && (!p.isAdminManager || p.hasActiveSchedule)
+                p => p.isStudioEligible !== false
               );
-              const preferredPro = eligiblePros[0] || draft.catalog.professionals[0];
+              const preferredPro = eligiblePros[0];
               const companionService: ProposedService = {
                 key: newKey,
                 name: cleanName,

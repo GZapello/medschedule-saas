@@ -41,6 +41,8 @@ import {
 } from '../utils/establishment-context';
 import {
   addonAppliesToBaseOption,
+  buildFallbackBaseCommercialOption,
+  resolveServiceCommercialModes,
   calculateCommercialOptionBreakdown,
   normalizeCommercialPriceOptions,
   normalizeOptionalAddonsConfig,
@@ -543,6 +545,26 @@ export class PackageController {
         return;
       }
 
+      let resolvedAddonOpt: StudioOptionalAddonOption | null = null;
+      if (baseServiceId || addonOptionId || baseCommercialOptionId) {
+        const base = db.prepare('SELECT * FROM services WHERE id = ? AND tenant_id = ? AND active = 1')
+          .get(String(baseServiceId || ''), tenant.id);
+        const cfg = normalizeOptionalAddonsConfig(base?.optional_addons_json);
+        if (base && resolveServiceCommercialModes(base).allowPublicPlanBooking && cfg.enabled) {
+          const options = normalizeCommercialPriceOptions(base.commercial_price_options_json, {
+            studioServiceType: base.studio_service_type, requiresAppointment: base.requires_appointment
+          });
+          const publicOptions = (options.length ? options : [buildFallbackBaseCommercialOption(base)])
+            .filter(o => o.active && o.allowPublicBooking !== false && (!baseCommercialOptionId || o.id === baseCommercialOptionId));
+          resolvedAddonOpt = cfg.options.find(o => o.id === addonOptionId && o.allowPublicBooking !== false &&
+            o.addonServiceId === srv.id && publicOptions.some(plan => addonAppliesToBaseOption(o, plan))) || null;
+        }
+        if (!resolvedAddonOpt) {
+          res.status(400).json({ error: 'Complemento indisponível para o plano e a opção comercial selecionados.' });
+          return;
+        }
+      }
+
       if (
         Number(srv.requires_appointment ?? 1) === 0 ||
         srv.studio_service_type === 'facility_access' ||
@@ -565,39 +587,6 @@ export class PackageController {
           emptyReason: 'Este plano ou benefício não exige escolha de dia, horário ou instrutor.'
         });
         return;
-      }
-
-      let resolvedAddonOpt: StudioOptionalAddonOption | null = null;
-      if (baseServiceId && addonOptionId) {
-        const baseSrvRow = db
-          .prepare(`SELECT id, studio_service_type, requires_appointment, commercial_price_options_json, optional_addons_json FROM services WHERE id = ? AND tenant_id = ? AND active = 1`)
-          .get(String(baseServiceId), tenant.id) as {
-            id: string;
-            studio_service_type?: string | null;
-            requires_appointment?: number | null;
-            commercial_price_options_json?: string | null;
-            optional_addons_json?: string | null;
-          } | undefined;
-        if (baseSrvRow?.optional_addons_json) {
-          const addonsCfg = normalizeOptionalAddonsConfig(baseSrvRow.optional_addons_json);
-          const candidateOpt = addonsCfg.options.find(
-            o => o.id === String(addonOptionId) && o.active && o.allowPublicBooking !== false && o.addonServiceId === srv.id
-          );
-          if (candidateOpt) {
-            if (baseCommercialOptionId && String(baseCommercialOptionId).trim()) {
-              const baseCommOpts = normalizeCommercialPriceOptions(baseSrvRow.commercial_price_options_json, {
-                studioServiceType: baseSrvRow.studio_service_type,
-                requiresAppointment: baseSrvRow.requires_appointment
-              });
-              const matchedBaseOpt = baseCommOpts.find(o => o.id === String(baseCommercialOptionId).trim()) || null;
-              if (matchedBaseOpt && !addonAppliesToBaseOption(candidateOpt, matchedBaseOpt)) {
-                res.status(400).json({ error: `O complemento "${candidateOpt.label}" não está habilitado para a opção comercial selecionada.` });
-                return;
-              }
-            }
-            resolvedAddonOpt = candidateOpt;
-          }
-        }
       }
 
       const addonAllowedProIds =

@@ -100,6 +100,7 @@ async function main() {
   db.prepare(`INSERT INTO professionals (id, tenant_id, name, profession_id, profession_name, active)
     VALUES (?, 'studio-fixture', ?, 'prof-personal-trainer', 'Personal Trainer', ?)`).run('prof-bia', 'Bia', 1);
   db.prepare("INSERT INTO professionals (id, tenant_id, name, active) VALUES ('prof-inativa', 'studio-fixture', 'Inativa', 0)").run();
+  db.prepare("INSERT INTO professionals (id, tenant_id, name, profession_id, profession_name, active) VALUES ('prof-fisio', 'studio-fixture', 'Dra. Lia', 'prof-fisioterapeuta', 'Fisioterapeuta', 1)").run();
   const shift = db.prepare(`INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, break_start, break_end)
     VALUES (?, 'studio-fixture', ?, ?, ?, ?, ?, ?)`);
   shift.run('wed-first', studio.profId, 3, '19:00', '19:30', null, null);
@@ -159,7 +160,9 @@ async function main() {
     const draft = await ok('POST', endpoint + '/analyze', studio, { files });
     assert.equal(draft.sources[0].copies, 2);
     assert.equal(draft.proposal.services.length, 12);
-    assert.deepEqual(draft.catalog.professionals.map(p => p.id).sort(), ['prof-bia', studio.profId].sort());
+    assert.deepEqual(draft.catalog.professionals.map(p => p.id).sort(), ['prof-bia', 'prof-fisio', studio.profId].sort());
+    assert.equal(draft.catalog.professionals.find(p => p.id === 'prof-fisio').name, 'Lia');
+    assert.ok(draft.catalog.unavailable.some(p => p.name === 'Inativa' && p.reason.includes('inativo')));
     assert.equal(draft.proposal.services.find(r => r.name === 'Pilates Individual').prices.length, 2);
     assert.equal(draft.proposal.services.find(r => r.name === 'Plano ambíguo').prices[0].unit, null);
     assert.ok(draft.proposal.services.find(r => r.name === 'Documento incompleto').issues.length);
@@ -177,6 +180,7 @@ async function main() {
       row.reviewed = true;
       if (row.modality) row.professionalId = studio.profId;
     }
+    find('Personal Individual').professionalId = 'prof-fisio';
     for (const row of proposal.packages) {
       row.action = 'create';
       row.reviewed = true;
@@ -239,6 +243,7 @@ async function main() {
     assert.equal(service('Musculação').requires_appointment, 0);
     assert.equal(service('Musculação').commercial_price_options.length, 4);
     assert.equal(service('Personal em Dupla').default_capacity, 2);
+    assert.equal(service('Personal Individual').professional_id, 'prof-fisio');
     assert.equal(service('Personal Individual').price, 80);
     assert.equal(service('Pilates Individual').commercial_price_options.length, 2);
     assert.equal(service('Pilates Individual').availability_windows.length, 2);

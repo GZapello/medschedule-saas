@@ -1923,7 +1923,7 @@ export class TenantController {
                 publicProfessionalIds: publicSelectableProfs.map((p: any) => p.id)
               });
 
-              if (Number(row.active) !== 0 && Number(row.allow_public_booking ?? 1) !== 0) {
+              if (Number(row.active) !== 0) {
                 addonServicesList.push({
                   id: row.id,
                   name: row.name,
@@ -2008,7 +2008,8 @@ export class TenantController {
         professionals: publicProfessionals,
         services: enrichedServices,
         packages,
-        addon_services: addonServicesList
+        addon_services: addonServicesList.filter(target => enrichedServices.some((base: any) =>
+          base.optional_addons?.enabled && base.optional_addons.options.some((opt: { addonServiceId: string }) => opt.addonServiceId === target.id)))
       });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;

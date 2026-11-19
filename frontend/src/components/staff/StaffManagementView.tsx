@@ -27,7 +27,7 @@ import {
   ShieldCheck,
   Clock
 } from 'lucide-react';
-import { formatDoctorName } from '../../utils/formatters';
+import { formatDoctorName, formatStudioProfessionalName } from '../../utils/formatters';
 
 const AVAILABLE_PERMISSIONS = [
   { id: 'manage_subscription', label: 'Gerenciar assinatura e plano da clínica' },
@@ -132,7 +132,8 @@ const formatDeletionDate = (scheduledAt?: string, deactivatedAt?: string) => {
 
 export const StaffManagementView: React.FC = () => {
   const {summary: billingSummary}=useBillingSummary();
-  const { isClinicAdmin, reloadSession } = useAuth();
+  const { isClinicAdmin, reloadSession, currentTenant } = useAuth();
+  const professionalName = currentTenant?.establishment_profile === 'studio' ? formatStudioProfessionalName : formatDoctorName;
   const { showToast } = useToast();
 
   const [staffList, setStaffList] = useState<any[]>([]);
@@ -520,7 +521,7 @@ export const StaffManagementView: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="font-bold text-slate-800 text-sm leading-snug">
-                      {member.role === 'professional' ? formatDoctorName(member.name, member.gender) : member.name}
+                      {member.role === 'professional' ? professionalName(member.name, member.gender) : member.name}
                     </h3>
                     <div className="flex flex-wrap items-center gap-1 mt-0.5">
                       <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">

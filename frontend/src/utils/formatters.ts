@@ -22,3 +22,7 @@ export function formatDoctorName(name?: string, gender?: string): string {
   const prefix = gender === 'F' ? 'Dra. ' : 'Dr. ';
   return `${prefix}${clean}`;
 }
+
+export function formatStudioProfessionalName(name?: string): string {
+  return (name || '').replace(/^\s*dr(?:a)?\.?\s+/i, '').trim();
+}

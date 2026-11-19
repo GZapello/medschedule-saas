@@ -12,6 +12,8 @@ export interface AddonProfessionalSummary {
   availableModules: string[];
   zemdaPersonalEnabled: boolean;
   userRole: string | null;
+  inactiveMembership: boolean;
+  studioPractitioner: boolean;
   isAdminManager: boolean;
   isPersonalOrFitnessQualified: boolean;
   isClinicalOnlyWithoutFitness: boolean;
@@ -109,7 +111,8 @@ export function listTenantAddonProfessionalsDetailed(tenantId: string): AddonPro
       COALESCE(p.public_booking_enabled, 1) as public_booking_enabled,
       COALESCE(p.active, 1) as active,
       pr.name as pr_name,
-      cu.role as cu_role,
+      cu.role as cu_role, cu.status as membership_status, u.status as account_status,
+      u.tenant_id as home_tenant_id, p.tenant_id, cu.deactivated_at,
       COALESCE(cu.is_manager, 0) as cu_is_manager,
       cu.profession_custom as cu_profession_custom,
       u.role as user_role
@@ -192,6 +195,9 @@ export function listTenantAddonProfessionalsDetailed(tenantId: string): AddonPro
       availableModules: modules,
       zemdaPersonalEnabled: Number(row.zemda_personal_enabled) === 1,
       userRole: role,
+      inactiveMembership: Boolean(row.user_id && (row.deactivated_at || row.account_status !== 'active' ||
+        (row.membership_status ? row.membership_status !== 'active' : row.home_tenant_id !== row.tenant_id))),
+      studioPractitioner: isPersonalOrFitnessQualified || canonical.commercialModule === 'ZemdaFisio',
       isAdminManager: isAdminOnlyRole,
       isPersonalOrFitnessQualified,
       isClinicalOnlyWithoutFitness,

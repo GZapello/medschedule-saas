@@ -2687,6 +2687,40 @@ export class ServiceController {
     }
   }
 
+  private static isStudioCatalogService(tenantId: string, id: string): boolean {
+    const s = db.prepare('SELECT service_domain, service_kind, clinical_module FROM services WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+    return Boolean(s && PackageService.isStudioCompatible(tenantId) && resolveServiceDomain({
+      establishmentProfile: getTenantEstablishmentProfile(tenantId), serviceDomain: s.service_domain,
+      serviceKind: s.service_kind, clinicalModule: s.clinical_module
+    }) === 'studio');
+  }
+
+  static studioHistory(req: Request, res: Response): void {
+    const tenantId = req.tenantId!;
+    const id = String(req.params.id);
+    if (!ServiceController.isStudioCatalogService(tenantId, id)) {
+      res.status(404).json({ error: 'Serviço do Studio não encontrado.' });
+      return;
+    }
+    res.json(db.prepare(`SELECT a.action, a.created_at, u.name AS actor FROM audit_logs a
+      LEFT JOIN users u ON u.id = a.user_id WHERE a.tenant_id = ? AND a.entity = 'services' AND a.entity_id = ?
+      ORDER BY a.created_at DESC, a.rowid DESC`).all(tenantId, id));
+  }
+
+  static reactivateStudioService(req: Request, res: Response): void {
+    const tenantId = req.tenantId!;
+    const id = String(req.params.id);
+    if (!ServiceController.isStudioCatalogService(tenantId, id)) {
+      res.status(404).json({ error: 'Serviço do Studio não encontrado.' });
+      return;
+    }
+    db.transaction(() => {
+      const result = db.prepare("UPDATE services SET active = 1, updated_at = datetime('now') WHERE tenant_id = ? AND id = ? AND active = 0").run(tenantId, id);
+      if (result.changes) logAudit(req, 'REACTIVATE_SERVICE', 'services', id, {}, { required: true });
+    })();
+    res.json({ success: true });
+  }
+
   static delete(req: Request, res: Response): void {
     try {
       const { id } = req.params;
@@ -2734,13 +2768,13 @@ export class ServiceController {
 
       const hasHistoricalLinks = appointmentCount > 0 || consultationCount > 0 || financialCount > 0 || referralCount > 0;
 
-      if (hasHistoricalLinks) {
+      if (hasHistoricalLinks || ServiceController.isStudioCatalogService(tenantId, String(id))) {
         // Se houver vínculo histórico, evitar exclusão destrutiva e preferir desativação/inativação, preservando registros antigos
         db.prepare("UPDATE services SET active = 0, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?").run(id, tenantId);
 
         logAudit(req, 'INACTIVATE_SERVICE', 'services', id, {
           name: service.name,
-          reason: 'historical_links',
+          reason: hasHistoricalLinks ? 'historical_links' : 'studio_catalog_archive',
           appointmentCount,
           consultationCount,
           financialCount,
@@ -2750,7 +2784,7 @@ export class ServiceController {
         res.json({
           success: true,
           action: 'inactivated',
-          message: 'O serviço possui vínculos históricos (agendamentos, atendimentos ou registros financeiros) e foi inativado para preservar os dados.',
+          message: hasHistoricalLinks ? 'O serviço possui vínculos históricos (agendamentos, atendimentos ou registros financeiros) e foi inativado para preservar os dados.' : 'Serviço desativado no catálogo do Studio.',
           service: { id: service.id, name: service.name, active: 0 }
         });
         return;

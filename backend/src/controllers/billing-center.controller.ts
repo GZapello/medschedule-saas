@@ -3,6 +3,11 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { getUserPermissions } from '../middlewares/rbac.middleware';
+import { resolveEnrollmentViewerPermissions } from './studio-access.controller';
+import { StudioAccessService } from '../services/studio-access.service';
+import { getTenantEstablishmentProfile, resolveServiceDomain } from '../utils/establishment-context';
+import { getTenantTimezone, getLocalDatePartsInTimezone } from '../utils/studio-timezone';
+import { validBookingDate } from '../utils/public-booking';
 import { PackageService } from '../services/package.service';
 import { StudentConsumptionService } from '../services/student-consumption.service';
 import {
@@ -365,49 +370,63 @@ export class BillingCenterController {
         return;
       }
 
-      const existing = db.prepare(`SELECT * FROM payments WHERE id = ? AND tenant_id = ?`).get(paymentId, tenantId) as any;
-      if (!existing) {
-        res.status(404).json({ error: 'Cobrança não encontrada.' });
-        return;
-      }
-      if (existing.status === 'cancelled' || existing.status === 'refunded') {
-        res.status(409).json({ error: 'Não é possível quitar uma cobrança cancelada ou estornada.' });
-        return;
-      }
+      const updated = db.transaction(() => {
+        const existing = db.prepare('SELECT * FROM payments WHERE id = ? AND tenant_id = ?').get(paymentId, tenantId);
+        const fail = (status: number, message: string): never => { throw Object.assign(new Error(message), { status }); };
+        if (!existing) return fail(404, 'Cobrança não encontrada.');
+        const plan = existing.recurring_plan_id && db.prepare(`SELECT p.contract_kind, s.service_domain, s.service_kind, s.clinical_module
+          FROM recurring_billing_plans p LEFT JOIN services s ON s.id = p.service_id AND s.tenant_id = p.tenant_id
+          WHERE p.tenant_id = ? AND p.id = ?`).get(tenantId, existing.recurring_plan_id);
+        const isEnrollment = Boolean(existing.package_contract_id || (plan && (plan.contract_kind === 'access_plan' || resolveServiceDomain({
+          establishmentProfile: getTenantEstablishmentProfile(tenantId), serviceDomain: plan.service_domain,
+          serviceKind: plan.service_kind, clinicalModule: plan.clinical_module
+        }) === 'studio')));
+        const { enrollmentId, amountReceived, paymentDate } = req.body || {};
+        if (enrollmentId && (!isEnrollment || ![existing.package_contract_id, existing.recurring_plan_id].includes(enrollmentId))) {
+          return fail(404, 'Cobrança não encontrada nesta matrícula.');
+        }
+        const method = paymentMethod || existing.payment_method || 'pix';
+        if (isEnrollment) {
+          if (!resolveEnrollmentViewerPermissions(req, tenantId).canReceivePayment) return fail(403, 'Sem permissão financeira para registrar recebimentos.');
+          const blocked = StudioAccessService.manualReceiptBlock(existing);
+          if (blocked) return fail(409, blocked);
+          if (existing.amount <= 0 || (amountReceived !== undefined && (typeof amountReceived !== 'number' ||
+              !Number.isFinite(amountReceived) || amountReceived !== Number(existing.amount)))) {
+            return fail(400, 'O Financeiro aceita a baixa integral desta cobrança. Confira o valor recebido.');
+          }
+          if (paymentDate !== undefined && (!validBookingDate(paymentDate) || paymentDate > getLocalDatePartsInTimezone(new Date(), getTenantTimezone(db, tenantId)).dateYmd)) {
+            return fail(400, 'Informe uma data de recebimento válida até hoje.');
+          }
+          if (!['pix','cash','credit_card','debit_card','bank_transfer','insurance','other'].includes(method)) return fail(400, 'Forma de pagamento inválida.');
+        } else if (['cancelled', 'refunded'].includes(existing.status)) {
+          return fail(409, 'Não é possível quitar uma cobrança cancelada ou estornada.');
+        }
 
-      let cashRegisterId: string | null = existing.cash_register_id || null;
-      if (!cashRegisterId) {
-        try {
-          const openReg = db.prepare(`
-            SELECT id FROM cash_registers WHERE tenant_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1
-          `).get(tenantId) as any;
-          if (openReg) cashRegisterId = openReg.id;
-        } catch (_) {}
-      }
-
-      const method = paymentMethod || existing.payment_method || 'pix';
-      db.prepare(`
-        UPDATE payments
-        SET status = 'paid',
-            payment_method = ?,
-            payment_date = COALESCE(payment_date, datetime('now')),
-            cash_register_id = COALESCE(cash_register_id, ?),
-            notes = CASE WHEN ? IS NOT NULL AND TRIM(?) != '' THEN TRIM(?) ELSE notes END
-        WHERE id = ? AND tenant_id = ?
-      `).run(method, cashRegisterId, notes || null, notes || '', notes || '', paymentId, tenantId);
-
-      PackageService.activateContractOnPaymentSettled(tenantId, paymentId, req.user?.userId || 'system');
-      StudentConsumptionService.syncFromPaymentUpdate(tenantId, paymentId, 'paid', method, req.user?.userId || null);
-
-      logAudit(req, 'COLLECTION_MARK_PAID', 'payments', paymentId, { paymentMethod: method });
-
-      const updated = db.prepare('SELECT * FROM payments WHERE id = ? AND tenant_id = ?').get(paymentId, tenantId);
+        const cashRegisterId = existing.cash_register_id || db.prepare(
+          "SELECT id FROM cash_registers WHERE tenant_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1"
+        ).get(tenantId)?.id || null;
+        db.prepare(`UPDATE payments SET status = 'paid', payment_method = ?,
+          payment_date = COALESCE(?, payment_date, datetime('now')), cash_register_id = ?,
+          notes = COALESCE(NULLIF(TRIM(?), ''), notes) WHERE id = ? AND tenant_id = ?`)
+          .run(method, isEnrollment ? paymentDate || null : null, cashRegisterId, notes || '', paymentId, tenantId);
+        const actor = req.user?.userId || 'system';
+        PackageService.activateContractOnPaymentSettled(tenantId, paymentId, actor);
+        StudentConsumptionService.syncFromPaymentUpdate(tenantId, paymentId, 'paid', method, actor);
+        if (isEnrollment) StudioAccessService.recordContractHistoryTx({
+          tenantId, patientId: existing.patient_id, recurringPlanId: existing.recurring_plan_id,
+          packageContractId: existing.package_contract_id, createdBy: actor, action: 'COLLECTION_MARK_PAID',
+          summary: 'Recebimento registrado no Financeiro.', newState: { paymentId, amount: existing.amount, payment_method: method }
+        });
+        logAudit(req, 'COLLECTION_MARK_PAID', 'payments', paymentId, { paymentMethod: method, amount: existing.amount, paymentDate }, { required: isEnrollment });
+        return db.prepare('SELECT * FROM payments WHERE id = ? AND tenant_id = ?').get(paymentId, tenantId);
+      })();
       res.json({
         success: true,
         message: 'Pagamento registrado com sucesso!',
         payment: updated
       });
     } catch (err: any) {
+      if (err.status && err.status < 500) { res.status(err.status).json({ error: err.message }); return; }
       console.error('[BillingCenterController.markPaid] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar quitação da cobrança.' });
     }

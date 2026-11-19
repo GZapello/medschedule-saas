@@ -9,6 +9,7 @@ import { PublicBookingRequestService } from '../services/public-booking-request.
 export interface EnrollmentViewerPermissions {
   canViewEnrollments: boolean;
   canViewFinancial: boolean;
+  canReceivePayment: boolean;
   canManageContracts: boolean;
   canDeliverEntitlement: boolean;
 }
@@ -24,6 +25,7 @@ export function resolveEnrollmentViewerPermissions(
     return {
       canViewEnrollments: true,
       canViewFinancial: true,
+      canReceivePayment: true,
       canManageContracts: true,
       canDeliverEntitlement: true
     };
@@ -38,6 +40,7 @@ export function resolveEnrollmentViewerPermissions(
       return {
         canViewEnrollments: false,
         canViewFinancial: false,
+        canReceivePayment: false,
         canManageContracts: false,
         canDeliverEntitlement: false
       };
@@ -57,6 +60,7 @@ export function resolveEnrollmentViewerPermissions(
         return {
           canViewEnrollments: false,
           canViewFinancial: false,
+        canReceivePayment: false,
           canManageContracts: false,
           canDeliverEntitlement: false
         };
@@ -86,6 +90,7 @@ export function resolveEnrollmentViewerPermissions(
   return {
     canViewEnrollments,
     canViewFinancial,
+    canReceivePayment: financialSource.includes('manage_financial'),
     canManageContracts,
     canDeliverEntitlement
   };

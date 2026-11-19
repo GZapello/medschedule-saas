@@ -1938,9 +1938,6 @@ export function hydrateOptionalAddonsConfig(
     if (!target || !target.active) {
       availabilityStatus = 'inactive_service';
       availabilityMessage = 'Serviço vinculado inativo ou não encontrado.';
-    } else if (publicOnly && target.allowPublicBooking === false) {
-      availabilityStatus = 'inactive_service';
-      availabilityMessage = 'Serviço vinculado não está publicado no link público.';
     } else if (!opt.label || !opt.label.trim()) {
       availabilityStatus = 'incomplete_config';
       availabilityMessage = 'Defina um rótulo comercial válido para o complemento.';

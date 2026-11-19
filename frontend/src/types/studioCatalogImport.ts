@@ -310,6 +310,7 @@ export interface ImportDraft {
     services: CatalogRecord[];
     packages: CatalogRecord[];
     professionals: CatalogProfessionalSummary[];
+    unavailable?: { name: string; reason: string }[];
   };
   matches: {
     services: Record<string, CatalogRecord[]>;

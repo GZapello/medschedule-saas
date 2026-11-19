@@ -54,7 +54,23 @@ export function readStudioImportCatalog(tenantId: string) {
     }) === 'studio');
   const packages = db.prepare('SELECT id, name, active, COALESCE(allow_public_booking, 1) as allow_public_booking FROM service_packages WHERE tenant_id = ? ORDER BY name').all(tenantId) as
     { id: string; name: string; active: number; allow_public_booking?: number }[];
-  const profDetails = listTenantAddonProfessionalsDetailed(tenantId).filter(p => p.active);
+  const displayName = (name: string) => name.replace(/^\s*dr(?:a)?\.?\s+/i, '').trim();
+  const unavailable = (db.prepare(`
+    SELECT u.name FROM users u LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+    WHERE (cu.id IS NOT NULL OR u.tenant_id = ?) AND COALESCE(cu.role, u.role) IN ('clinic_admin', 'professional', 'receptionist')
+      AND NOT EXISTS (SELECT 1 FROM professionals p WHERE p.tenant_id = ? AND p.user_id = u.id)
+    ORDER BY u.name
+  `).all(tenantId, tenantId, tenantId) as { name: string }[]).map(u => ({ name: displayName(u.name), reason: 'Sem cadastro profissional neste estabelecimento.' }));
+  const profDetails = listTenantAddonProfessionalsDetailed(tenantId).filter(p => {
+    const linkedStudio = services.some(s => s.active && p.linkedServiceIds.includes(s.id));
+    let reason = '';
+    if (!p.active) reason = 'Cadastro profissional inativo.';
+    else if (p.inactiveMembership) reason = 'Conta ou vínculo com o estabelecimento inativo.';
+    else if (!p.studioPractitioner && !linkedStudio && (p.isAdminManager || p.isClinicalOnlyWithoutFitness || p.userRole === 'receptionist'))
+      reason = 'Sem habilitação profissional para o Studio.';
+    if (reason) unavailable.push({ name: displayName(p.name), reason });
+    return !reason;
+  });
 
   const professionals: CatalogProfessionalSummary[] = profDetails.map(p => {
     const workShifts: CatalogWorkShift[] = [];
@@ -69,24 +85,24 @@ export function readStudioImportCatalog(tenantId: string) {
       }
     }
     const hasActiveSchedule = p.hasActiveSchedule || workShifts.length > 0;
-    const isStudioEligible = !p.isAdminManager && !p.isClinicalOnlyWithoutFitness;
+
     return {
       id: p.id,
-      name: p.name,
+      name: displayName(p.name),
       professionId: p.professionId,
       professionName: p.professionName,
       availableModules: p.availableModules,
       linkedServiceIds: p.linkedServiceIds,
       hasActiveSchedule,
       isAdminManager: p.isAdminManager,
-      isStudioEligible,
+      isStudioEligible: true,
       publicBookingEnabled: p.publicBookingEnabled,
       workShifts,
       scheduleSummary: summaryParts.length > 0 ? summaryParts.join(' · ') : 'Sem escala semanal ativa'
     };
   });
 
-  return { services, packages, professionals };
+  return { services, packages, professionals, unavailable };
 }
 
 export function scoreCatalogSimilarity(a: string, b: string): { score: number; reason: string } {
@@ -1092,7 +1108,7 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
             ? (current.professional_id || row.professionalId || fallbackSlotProf)
             : (row.professionalId || current.professional_id || fallbackSlotProf))
         : (row.professionalId || fallbackSlotProf)) || '';
-      if (isCreate && scheduled && !catalog.professionals.some(p => p.id === professional)) {
+      if (scheduled && (isCreate || professional !== current?.professional_id) && !catalog.professionals.some(p => p.id === professional)) {
         throw catalogError('Selecione um profissional responsável ativo deste estabelecimento.');
       }
       if (isCreate && (!row.type || (scheduled && (!duration || !row.modality ||
@@ -1366,7 +1382,8 @@ export function applyStudioCatalog(req: Request, proposal: StudioProposal): Impo
           ? ao.enabledProfessionalIds.filter((pid) => {
               const dp = detailedById.get(pid);
               if (!dp || !dp.active) return false;
-              if (!targetSrv) return !dp.isAdminManager && !dp.isClinicalOnlyWithoutFitness;
+              if (!catalog.professionals.some(p => p.id === pid)) return false;
+              if (!targetSrv) return true;
               return isProfessionalEligibleForAddonService(dp, {
                 id: targetSrv.id,
                 name: targetSrv.name,

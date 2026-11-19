@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { formatDoctorName } from '../../utils/formatters';
+import { formatDoctorName, formatStudioProfessionalName } from '../../utils/formatters';
 import { Professional, Profession, Specialty } from '../../types';
 import {
   Users,
@@ -198,6 +198,8 @@ const DEFAULT_INSTRUCTOR_MODALITIES = [
 
 export const UnifiedTeamManagement: React.FC = () => {
   const { isClinicAdmin, reloadSession, currentTenant } = useAuth();
+  const studioTeam = currentTenant?.establishment_profile === 'studio';
+  const teamName = studioTeam ? formatStudioProfessionalName : formatDoctorName;
   const { showToast } = useToast();
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -849,7 +851,7 @@ export const UnifiedTeamManagement: React.FC = () => {
             </div>
           ) : (
             filteredMembers.map((member) => {
-              const displayName = formatDoctorName(member.name, member.professionalRecord?.gender || 'M');
+              const displayName = teamName(member.name, member.professionalRecord?.gender || 'M');
               const isPending = member.status === 'pending';
               const isInactive = member.status === 'inactive' || member.status === 'blocked';
 
@@ -994,7 +996,7 @@ export const UnifiedTeamManagement: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-slate-900 text-base">
-                      {formatDoctorName(selectedMember.name, sheetGender)}
+                      {teamName(selectedMember.name, sheetGender)}
                     </h3>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
                       {selectedMember.effectiveProfession || 'Profissional'}
@@ -1099,8 +1101,8 @@ export const UnifiedTeamManagement: React.FC = () => {
                         onChange={e => setSheetGender(e.target.value as 'M' | 'F')}
                         className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                       >
-                        <option value="M">Dr. (Masculino)</option>
-                        <option value="F">Dra. (Feminino)</option>
+                        <option value="M">{studioTeam ? 'Masculino' : 'Dr. (Masculino)'}</option>
+                        <option value="F">{studioTeam ? 'Feminino' : 'Dra. (Feminino)'}</option>
                       </select>
                     </div>
 
