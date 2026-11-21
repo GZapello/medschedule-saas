@@ -374,7 +374,7 @@ export class StudioAccessService {
 
     const { frequency: billingFreq, cycleMonths } = normalizePeriodicFrequency(
       input.billingFrequency ||
-      (paymentPeriodicity === 'bimonthly' || paymentPeriodicity === 'quarterly' || paymentPeriodicity === 'semiannual' || paymentPeriodicity === 'annual'
+      (paymentPeriodicity === 'monthly' || paymentPeriodicity === 'bimonthly' || paymentPeriodicity === 'quarterly' || paymentPeriodicity === 'semiannual' || paymentPeriodicity === 'annual'
         ? paymentPeriodicity
         : (srv.billing_mode && srv.billing_mode !== 'per_session' && srv.billing_mode !== 'package' ? srv.billing_mode : 'monthly'))
     );
@@ -522,7 +522,7 @@ export class StudioAccessService {
       input.tenantId,
       input.studentId,
       srv.id,
-      input.professionalId || srv.professional_id || null,
+      contractKind === 'access_plan' ? null : (input.professionalId || srv.professional_id || null),
       planTitle,
       cycleAmount,
       billingFreq,
@@ -604,7 +604,7 @@ export class StudioAccessService {
             label,
             srv.id,
             due,
-            input.professionalId || srv.professional_id || null,
+            contractKind === 'access_plan' ? null : (input.professionalId || srv.professional_id || null),
             planId,
             idx === 0 ? due.slice(0, 7) : null,
             instNum,
@@ -974,7 +974,7 @@ export class StudioAccessService {
         input.tenantId,
         input.studentId,
         srv.id,
-        input.professionalId || srv.professional_id || null,
+        contractKind === 'access_plan' ? null : (input.professionalId || srv.professional_id || null),
         contractId,
         planTitle,
         primaryCycleAmountReais,

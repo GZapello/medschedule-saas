@@ -563,11 +563,20 @@ async function runTests() {
       db.prepare(`UPDATE appointments SET status = 'completed' WHERE id = ? AND tenant_id = ?`).run(a.id, studioId);
     }
 
+    const unconfigured = await makeReq('POST', '/api/v1/payroll/calculate', authStudio, { periodMonth: targetMonth });
+    assert(unconfigured.data.warnings.some(w => w.code === 'STUDIO_ALLOCATION_REQUIRED'), 'Plano sem regra explícita avisa em vez de dividir pelas aulas encontradas', unconfigured.data.warnings);
+    for (const [professionalId, percentage] of [[profSt1, 50], [profSt2, 30]]) {
+      const configured = await makeReq('PUT', `/api/v1/professionals/${professionalId}/service-commissions`, authStudio, {
+        rules: [{ serviceId: triServiceId, commissionType: 'percentage', commissionValue: percentage,
+          studioTerms: { recognition: 'performed', allocation: 'fixed_session', sessionBasis: 20, revenueSharePercent: 100 } }]
+      });
+      assert(configured.status === 200, 'Gestor configura base de R$ 20 por aula', configured.data);
+    }
     const payRes = await makeReq('POST', '/api/v1/payroll/calculate', authStudio, { periodMonth: targetMonth });
     assert(payRes.status === 200, 'Cenário 10: POST /api/v1/payroll/calculate executado', payRes.data);
     const rowLia = (payRes.data.results || []).find(r => r.professionalId === profSt1);
     const rowCaio = (payRes.data.results || []).find(r => r.professionalId === profSt2);
-    const expectedProratedTotal = Math.round(((540 / pat3TotalCycleCount) * pat3MonthAppts.length) * 100) / 100;
+    const expectedProratedTotal = 20 * pat3MonthAppts.length;
     const totalProducedBoth = Number(rowLia?.producedAmount || 0) + Number(rowCaio?.producedAmount || 0);
     const dropSameMonth = nextTue.slice(0, 7) === targetMonth ? 0 : 0; // nextTue wasn't completed, only pat3MonthAppts were completed!
     assert(

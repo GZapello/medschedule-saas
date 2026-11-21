@@ -1008,7 +1008,7 @@ export class ServiceController {
       }
 
       const {
-        professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
+        professionalId: requestedProfessionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
         reminderEnabled, reminderValue, reminderUnit, clinicalModule,
         serviceKind, service_kind, defaultCapacity, default_capacity, allowRecurrence, allow_recurrence,
@@ -1040,12 +1040,13 @@ export class ServiceController {
       const rawClassSchedules = Array.isArray(req.body?.classSchedules)
         ? req.body.classSchedules
         : (Array.isArray(req.body?.class_schedules) ? req.body.class_schedules : []);
+      const professionalId = isStudioCompat && (req.body.studioServiceType === 'facility_access' || req.body.studio_service_type === 'facility_access') ? null : requestedProfessionalId;
       const rawKind = serviceKind ?? service_kind;
       const rawStudioType = req.body?.studioServiceType ?? req.body?.studio_service_type;
       const resolvedStudioType: StudioServiceType = isStudioCompat
         ? normalizeStudioServiceType(rawStudioType, rawKind)
         : 'individual';
-      const resolvedKind = resolvedStudioType === 'group' || (rawKind || 'individual') === 'group' ? 'group' : 'individual';
+      const resolvedKind = resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled' ? 'individual' : (resolvedStudioType === 'group' || (rawKind || 'individual') === 'group' ? 'group' : 'individual');
       const isNonScheduledStudioService =
         isStudioCompat && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled');
       const rawCapacity = defaultCapacity !== undefined ? defaultCapacity : default_capacity;
@@ -1083,7 +1084,7 @@ export class ServiceController {
       const rawPlanCreditsPerCycle = req.body?.planCreditsPerCycle !== undefined ? req.body.planCreditsPerCycle : req.body?.plan_credits_per_cycle;
       const rawEffectiveStartDate = req.body?.effectiveStartDate !== undefined ? req.body.effectiveStartDate : req.body?.effective_start_date;
       const rawEffectiveEndDate = req.body?.effectiveEndDate !== undefined ? req.body.effectiveEndDate : req.body?.effective_end_date;
-      const requestedLinkedIds = parseLinkedInstructorIds(req.body);
+      let requestedLinkedIds = parseLinkedInstructorIds(req.body);
 
       if (!isStudioCompat) {
         if (
@@ -1151,6 +1152,7 @@ export class ServiceController {
         return;
       }
 
+      if (resolvedStudioType === 'facility_access') requestedLinkedIds = [];
       let effectiveCreateProfId: string | null = professionalId ? String(professionalId) : null;
       let prof: any = null;
       let targetModule: string | null = null;
@@ -1173,7 +1175,7 @@ export class ServiceController {
           return;
         }
         const availableModules = getAvailableModulesForProfessional(effectiveCreateProfId, tenantId);
-        if (clinicalModule) {
+        if (clinicalModule && !isNonScheduledStudioService) {
           const isAllowed = availableModules.some(m => m.code === clinicalModule);
           if (!isAllowed) {
             res.status(400).json({ error: `O módulo "${clinicalModule}" não é permitido para este profissional.` });
@@ -1189,6 +1191,8 @@ export class ServiceController {
       } else {
         targetModule = null;
       }
+
+      if (isNonScheduledStudioService) targetModule = null;
 
       const resolvedDomain: ServiceDomain = resolveServiceDomain({
         establishmentProfile,
@@ -1425,14 +1429,14 @@ export class ServiceController {
       const id = 'srv-' + uuidv4().slice(0, 8);
       const scheduleWarnings: string[] = [];
       let createdSchedules: any[] = [];
-      const effectiveDurationMinutes =
+      const effectiveDurationMinutes = resolvedRequiresAppointment === 0 ? 0 :
         durationMinutes !== undefined && durationMinutes !== null && durationMinutes !== ''
           ? Number(durationMinutes)
-          : (resolvedRequiresAppointment === 0 ? 0 : 50);
-      const effectiveBufferMinutes =
+          : 50;
+      const effectiveBufferMinutes = resolvedRequiresAppointment === 0 ? 0 :
         bufferMinutes !== undefined && bufferMinutes !== null && bufferMinutes !== ''
           ? Number(bufferMinutes)
-          : (resolvedRequiresAppointment === 0 ? 0 : 10);
+          : 10;
 
       db.transaction(() => {
         const insertStmt = db.prepare(`
@@ -1748,7 +1752,7 @@ export class ServiceController {
         : (Array.isArray(req.body?.class_schedules) ? req.body.class_schedules : []);
 
       const {
-        professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
+        professionalId: requestedProfessionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, active, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
         reminderEnabled, reminderValue, reminderUnit, clinicalModule,
         serviceKind, service_kind, defaultCapacity, default_capacity, allowRecurrence, allow_recurrence,
@@ -1775,6 +1779,7 @@ export class ServiceController {
         availabilityWindows, availability_windows
       } = req.body;
 
+      let professionalId = requestedProfessionalId;
       const rawKind = serviceKind !== undefined ? serviceKind : service_kind;
       const rawStudioType = req.body?.studioServiceType !== undefined ? req.body.studioServiceType : req.body?.studio_service_type;
       const rawAccessConfig = req.body?.accessConfig !== undefined ? req.body.accessConfig : req.body?.access_config;
@@ -1812,7 +1817,7 @@ export class ServiceController {
       const rawLinkedTplIds = linkedTemplateIds !== undefined ? linkedTemplateIds : linked_template_ids;
       const rawAvailabilityMode = availabilityMode !== undefined ? availabilityMode : availability_mode;
       const rawAvailabilityWindows = availabilityWindows !== undefined ? availabilityWindows : availability_windows;
-      const requestedLinkedIds = parseLinkedInstructorIds(req.body);
+      let requestedLinkedIds = parseLinkedInstructorIds(req.body);
       const effectiveTargetProfForCheck = professionalId !== undefined ? (professionalId || null) : existing.professional_id;
 
       if (!isStudioCompat) {
@@ -1864,7 +1869,7 @@ export class ServiceController {
             rawKind !== undefined ? rawKind : existing.service_kind
           );
 
-      const nextKind = !isStudioCompat
+      const nextKind = nextStudioType === 'facility_access' || nextStudioType === 'non_scheduled' ? 'individual' : !isStudioCompat
         ? 'individual'
         : (nextStudioType === 'group' || (rawKind !== undefined ? rawKind === 'group' : (existing.service_kind || 'individual') === 'group')
             ? 'group'
@@ -1886,6 +1891,8 @@ export class ServiceController {
         }
       }
 
+      if (nextStudioType === 'facility_access') { professionalId = null; requestedLinkedIds = []; }
+
       const nextModCat = !isStudioCompat
         ? existing.modality_category
         : (modalityCategory !== undefined || modality_category !== undefined
@@ -1902,7 +1909,7 @@ export class ServiceController {
 
       // Validação de módulo clínico no update se fornecido
       const targetProfId = professionalId !== undefined ? (professionalId || null) : existing.professional_id;
-      if (targetProfId && clinicalModule !== undefined && clinicalModule !== null && clinicalModule !== '') {
+      if (nextStudioType !== 'facility_access' && nextStudioType !== 'non_scheduled' && targetProfId && clinicalModule !== undefined && clinicalModule !== null && clinicalModule !== '') {
         const availableModules = getAvailableModulesForProfessional(targetProfId, tenantId);
         const isAllowed = availableModules.some(m => m.code === clinicalModule);
         if (!isAllowed) {
@@ -1925,6 +1932,11 @@ export class ServiceController {
 
       if (establishmentProfile === 'mixed' && nextDomain === 'clinical' && (nextKind === 'group' || nextStudioType !== 'individual')) {
         res.status(400).json({ error: 'Serviços clínicos em estabelecimentos mistos devem ser individuais. Selecione o segmento Academia & Studio para criar aula coletiva, turma ou plano de acesso.' });
+        return;
+      }
+
+      if (nextDomain === 'studio' && (nextStudioType === 'individual' || nextStudioType === 'group') && !targetProfId) {
+        res.status(400).json({ error: 'Aulas individuais e coletivas exigem um profissional responsável.' });
         return;
       }
 
@@ -2166,7 +2178,10 @@ export class ServiceController {
       let availShouldPersistWindows = false;
       let availValidatedWindows: ReturnType<typeof listServiceAvailabilityWindows> = [];
 
-      if (rawAvailabilityMode !== undefined || rawAvailabilityWindows !== undefined) {
+      if (!nextRequiresApptPreview) {
+        nextAvailabilityMode = 'professional_schedule';
+        availShouldPersistWindows = true;
+      } else if (rawAvailabilityMode !== undefined || rawAvailabilityWindows !== undefined) {
         const existingLinkedProfsForAvail = requestedLinkedIds !== undefined
           ? []
           : (isStudioCompat ? (getLinkedProfessionalsMap(tenantId, new Map([[String(id), targetProfId || null]])).get(String(id)) || []) : []);
@@ -2357,8 +2372,8 @@ export class ServiceController {
           specialtyId !== undefined ? 1 : 0, specialtyId || null,
           name !== undefined ? 1 : 0, name ? name.trim() : existing.name,
           description !== undefined ? 1 : 0, description !== null ? description : null,
-          durationMinutes !== undefined ? 1 : 0, durationMinutes !== undefined ? Number(durationMinutes) : 50,
-          bufferMinutes !== undefined ? 1 : 0, bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
+          (durationMinutes !== undefined || !nextRequiresApptPreview) ? 1 : 0, !nextRequiresApptPreview ? 0 : (durationMinutes !== undefined ? Number(durationMinutes) : 50),
+          (bufferMinutes !== undefined || !nextRequiresApptPreview) ? 1 : 0, !nextRequiresApptPreview ? 0 : (bufferMinutes !== undefined ? Number(bufferMinutes) : 10),
           (hasExplicitPrice || (isStudioCompat && nextDomain === 'studio' && !updatedModes.allowSingleBooking)) ? 1 : 0,
           effectiveUpdatePrice,
           modality !== undefined ? 1 : 0, modality || 'both',

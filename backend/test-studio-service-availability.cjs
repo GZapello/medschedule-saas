@@ -229,6 +229,10 @@ async function runTests() {
     const yogaRes = await makeReq('POST', '/api/v1/services', authStudio, {
       professionalId: profStudio,
       name: 'Yoga Individual',
+      // O cenário 9c contrata um plano pelo link público; habilitar essa oferta
+      // explicitamente para testar disponibilidade, não o bloqueio comercial.
+      allowPlanBooking: true,
+      allowPublicPlanBooking: true,
       durationMinutes: 60,
       bufferMinutes: 0,
       price: 140,

@@ -261,6 +261,8 @@ export const UnifiedTeamManagement: React.FC = () => {
     commission_type: 'percentage' | 'fixed' | null;
     commission_value: number | null;
     group_payout_basis: 'per_class' | 'per_present_student';
+    is_studio?: boolean;
+    studio_terms?: { recognition: 'performed' | 'received'; allocation: 'none' | 'contract_credits' | 'fixed_session'; sessionBasis: number; revenueSharePercent: number };
     rule_active: number | boolean;
   }>>([]);
   const [loadingServiceCommissions, setLoadingServiceCommissions] = useState<boolean>(false);
@@ -595,7 +597,8 @@ export const UnifiedTeamManagement: React.FC = () => {
           active: Boolean(rule.rule_active),
           commissionType: rule.commission_type === 'fixed' ? 'fixed' : 'percentage',
           commissionValue: Number(rule.commission_value ?? 0),
-          groupPayoutBasis: rule.group_payout_basis === 'per_class' ? 'per_class' : 'per_present_student'
+          groupPayoutBasis: rule.group_payout_basis === 'per_class' ? 'per_class' : 'per_present_student',
+          ...(rule.is_studio ? { studioTerms: rule.studio_terms } : {})
         }))
       });
       showToast('Configurações financeiras e comissões por serviço salvas com sucesso!', 'success');
@@ -1813,7 +1816,7 @@ export const UnifiedTeamManagement: React.FC = () => {
                                       />
                                       <span className="font-semibold text-xs text-slate-800">{svc.service_name}</span>
                                       <span className="text-[11px] text-slate-500">
-                                        (R$ {Number(svc.price || 0).toFixed(2).replace('.', ',')})
+                                        ({svc.is_studio ? 'Avulso: ' : ''}R$ {Number(svc.price || 0).toFixed(2).replace('.', ',')})
                                       </span>
                                       {isGroup && (
                                         <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-teal-100 text-teal-800">
@@ -1830,6 +1833,28 @@ export const UnifiedTeamManagement: React.FC = () => {
                                     )}
                                   </div>
 
+                                  {active && svc.is_studio && (() => {
+                                    const terms = svc.studio_terms || { recognition: 'performed' as const, allocation: 'none' as const, sessionBasis: 0, revenueSharePercent: 100 };
+                                    const updateTerms = (patch: Partial<typeof terms>) => setServiceCommissions(prev => prev.map((item, i) => i === idx ? { ...item, studio_terms: { ...terms, ...patch } } : item));
+                                    return <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                      <label>Apurar comissão por
+                                        <select aria-label={`Apuração de ${svc.service_name}`} className="w-full border border-slate-200 rounded-lg p-2" value={terms.recognition} onChange={e => updateTerms({ recognition: e.target.value as typeof terms.recognition })}>
+                                          <option value="performed">Aula realizada / presença confirmada</option>
+                                          <option value="received" disabled={svc.commission_type === 'fixed' && svc.group_payout_basis === 'per_class'}>Recebimento confirmado da aula realizada</option>
+                                        </select>
+                                      </label>
+                                      <label>Base percentual de planos e pacotes
+                                        <select aria-label={`Rateio de ${svc.service_name}`} className="w-full border border-slate-200 rounded-lg p-2" value={terms.allocation} onChange={e => updateTerms({ allocation: e.target.value as typeof terms.allocation })}>
+                                          <option value="none">Sem rateio definido (exibe aviso)</option>
+                                          <option value="contract_credits">Preço contratado / créditos fixos contratados</option>
+                                          <option value="fixed_session">Base em reais definida por aula</option>
+                                        </select>
+                                      </label>
+                                      {terms.allocation === 'fixed_session' && <label>Base por aula (R$)<input aria-label={`Base por aula de ${svc.service_name}`} type="number" min="0" step="0.01" value={terms.sessionBasis} onChange={e => updateTerms({ sessionBasis: Number(e.target.value) })} className="w-full border border-slate-200 rounded-lg p-2" /></label>}
+                                      {terms.allocation === 'contract_credits' && <label>Parcela da receita destinada ao serviço (%)<input aria-label={`Parcela da receita de ${svc.service_name}`} type="number" min="0" max="100" step="0.01" value={terms.revenueSharePercent} onChange={e => updateTerms({ revenueSharePercent: Number(e.target.value) })} className="w-full border border-slate-200 rounded-lg p-2" /></label>}
+                                      <p className="sm:col-span-2 text-slate-500">O rateio usa os valores congelados na contratação. Complementos com preço discriminado usam seu próprio valor. Em pacotes combinados, configure a parcela deste serviço. Comissão fixa remunera a aula elegível, independentemente do preço avulso.</p>
+                                    </div>;
+                                  })()}
                                   {active && (
                                     <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
                                       <div>

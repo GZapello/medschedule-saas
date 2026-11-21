@@ -363,6 +363,7 @@ export function migrateStudioImprovements(rawDb: DatabaseSync): void {
   addColIfMissing('services', 'allowed_plan_durations_json', 'TEXT');
   addColIfMissing('services', 'default_plan_duration', 'TEXT');
   addColIfMissing('class_occurrences', 'class_schedule_id', 'TEXT');
+  addColIfMissing('professional_service_commissions', 'studio_terms_json', 'TEXT');
   addColIfMissing('payroll_items', 'participant_role', `TEXT DEFAULT 'primary'`);
   addColIfMissing('payroll_items', 'is_package_covered', 'INTEGER NOT NULL DEFAULT 0');
   addColIfMissing('payroll_items', 'package_contract_id', 'TEXT');

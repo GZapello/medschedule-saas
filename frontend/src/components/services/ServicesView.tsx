@@ -952,10 +952,10 @@ export const ServicesView: React.FC = () => {
       clinicalModule: s.clinical_module
     });
     const resolvedEditType = domain === 'studio'
-      ? normalizeStudioServiceType(s.studio_service_type, s.service_kind)
+      ? normalizeStudioServiceType(s.studio_service_type, s.service_kind, s.requires_appointment)
       : 'individual';
     const isEditNonScheduled = domain === 'studio' && (resolvedEditType === 'facility_access' || resolvedEditType === 'non_scheduled');
-    const profId = s.professional_id || (isEditNonScheduled ? '' : (professionals.length > 0 ? professionals[0].id : ''));
+    const profId = domain === 'studio' && resolvedEditType === 'facility_access' ? '' : (s.professional_id || (isEditNonScheduled ? '' : (professionals.length > 0 ? professionals[0].id : '')));
     setEditProfessionalId(profId);
     
     const prof = professionals.find(p => p.id === profId);
@@ -1253,6 +1253,7 @@ export const ServicesView: React.FC = () => {
   const groupedServices = useMemo(() => {
     const profMap = new Map<string, Professional>();
     professionals.forEach(p => profMap.set(p.id, p));
+    const isGeneralAccess = (s: Service) => resolveServiceDomain({ establishmentProfile, serviceDomain: s.service_domain, serviceKind: s.service_kind, clinicalModule: s.clinical_module }) === 'studio' && normalizeStudioServiceType(s.studio_service_type, s.service_kind, s.requires_appointment) === 'facility_access';
 
     // Se filtrou por um profissional específico, inclui serviços em que ele é responsável OU instrutor vinculado
     if (selectedProfFilter !== 'all') {
@@ -1262,7 +1263,7 @@ export const ServicesView: React.FC = () => {
         profName: prof?.name || 'Profissional',
         professionName: prof?.profession_name || '',
         items: catalogRows.filter(
-          s => s.professional_id === selectedProfFilter || s.linked_professional_ids?.includes(selectedProfFilter)
+          s => !isGeneralAccess(s) && (s.professional_id === selectedProfFilter || s.linked_professional_ids?.includes(selectedProfFilter))
         )
       }];
     }
@@ -1276,7 +1277,7 @@ export const ServicesView: React.FC = () => {
     }> = [];
 
     for (const prof of professionals) {
-      const profServices = catalogRows.filter(s => s.professional_id === prof.id);
+      const profServices = catalogRows.filter(s => !isGeneralAccess(s) && s.professional_id === prof.id);
       groups.push({
         profId: prof.id,
         profName: prof.name,
@@ -1286,18 +1287,18 @@ export const ServicesView: React.FC = () => {
     }
 
     // Serviços sem profissional atribuído (planos gerais de academia ou serviços sem instrutor)
-    const unassigned = catalogRows.filter(s => !s.professional_id || !profMap.has(s.professional_id));
+    const unassigned = catalogRows.filter(s => isGeneralAccess(s) || !s.professional_id || !profMap.has(s.professional_id));
     if (unassigned.length > 0) {
       groups.push({
         profId: null,
-        profName: isStudioCompatible ? 'Planos Gerais & Acesso à Academia' : 'Geral da Clínica / Não Atribuído',
+        profName: isStudioCompatible ? 'Serviços gerais da Academia & Studio' : 'Geral da Clínica / Não Atribuído',
         professionName: isStudioCompatible ? 'Sem vínculo obrigatório com Personal' : '',
         items: unassigned
       });
     }
 
     return groups;
-  }, [catalogRows, professionals, selectedProfFilter, isStudioCompatible]);
+  }, [catalogRows, professionals, selectedProfFilter, isStudioCompatible, establishmentProfile]);
 
   const selectableCreateScheduleProfessionals = useMemo(() => {
     const activeIds = new Set([professionalId, ...linkedProfessionalIds].filter(Boolean));

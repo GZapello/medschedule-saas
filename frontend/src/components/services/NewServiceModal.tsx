@@ -280,7 +280,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         setAvailabilityWindows(Array.isArray(serviceToEdit.availability_windows) ? serviceToEdit.availability_windows : []);
         setDescription(serviceToEdit.description || '');
         const isEditNonScheduled = domain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled');
-        const editPrimaryId = serviceToEdit.professional_id || (isEditNonScheduled ? '' : (initialProfessionalId || professionals[0]?.id || ''));
+        const editPrimaryId = domain === 'studio' && resolvedStudioType === 'facility_access' ? '' : (serviceToEdit.professional_id || (isEditNonScheduled ? '' : (initialProfessionalId || professionals[0]?.id || '')));
         setProfessionalId(editPrimaryId);
         const existingLinked = Array.isArray(serviceToEdit.linked_professional_ids) && serviceToEdit.linked_professional_ids.length > 0
           ? serviceToEdit.linked_professional_ids

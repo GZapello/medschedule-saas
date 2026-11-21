@@ -656,6 +656,10 @@ async function runTests() {
       VALUES (?, ?, ?, ?, 'percentage', 60)
     `).run(uuidv4(), studioId, prof2, indSrvId);
 
+    // O gestor escolhe explicitamente o rateio pelos quatro créditos contratuais.
+    db.prepare('UPDATE professional_service_commissions SET studio_terms_json = ? WHERE tenant_id = ? AND service_id = ?')
+      .run(JSON.stringify({ recognition: 'performed', allocation: 'contract_credits', revenueSharePercent: 100 }), studioId, indSrvId);
+
     const apptPkgId = uuidv4();
     db.prepare(`
       INSERT INTO appointments (

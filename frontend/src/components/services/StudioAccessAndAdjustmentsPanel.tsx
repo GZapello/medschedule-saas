@@ -1295,6 +1295,12 @@ export const StudioAccessAndAdjustmentsPanel: React.FC<StudioAccessAndAdjustment
                       Pública
                     </label>
                   </div>
+                  {(() => {
+                    const bd = calculateCommercialOptionBreakdown(opt, { servicePlanCreditMode: planCreditMode, servicePlanCreditsPerCycle: planCreditsPerCycle });
+                    return <p className="text-[11px] text-slate-600 border-t border-slate-200/70 pt-2">
+                      Anunciado: R$ {bd.unitAmountReais.toFixed(2).replace('.', ',')} · {COMMERCIAL_UNIT_LABELS[opt.commercialUnit]} · Contrato: {PLAN_DURATION_LABELS[opt.contractDurationCode]} · {PAYMENT_PERIODICITY_LABELS[opt.paymentPeriodicity]} · Por cobrança: R$ {(opt.paymentPeriodicity === 'installments' ? bd.installmentAmountReais : bd.cycleAmountReais).toFixed(2).replace('.', ',')} · Total contratual: R$ {bd.totalContractAmountReais.toFixed(2).replace('.', ',')}
+                    </p>;
+                  })()}
                   {studioServiceType !== 'facility_access' && opt.accessType !== 'unlimited' && opt.frequencyType !== 'unlimited' && (
                     <div className="flex flex-wrap items-center gap-2 text-[11px] pt-1 border-t border-slate-200/70">
                       <span className="text-slate-600 font-medium">Modelo de créditos:</span>
