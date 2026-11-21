@@ -196,10 +196,75 @@ call(ServiceController.update, { studioServiceType: 'facility_access', professio
 equal(db.prepare('SELECT professional_id FROM services WHERE id = ?').get(converted.id).professional_id, null, 'conversion ignores obsolete professional availability inputs');
 equal(db.prepare('SELECT service_id FROM appointments WHERE id = ?').get(converted.id).service_id, converted.id, 'conversion preserves appointment history');
 
+// The real settings editor and payroll price summary use the same catalogue rules.
+const { resolveServiceCommercialModes, normalizeCommercialPriceOptions } = require('./dist/utils/studio-access-and-commercial');
+const legacyAccess = { service_domain: 'studio', studio_service_type: 'individual', service_kind: 'individual', requires_appointment: 1, commercial_price_options: options };
+equal(resolveServiceCommercialModes(legacyAccess, 'studio').studioServiceType, 'facility_access', 'legacy access offers override stale individual default');
+equal(resolveServiceCommercialModes(legacyAccess, 'mixed').requiresAppointment, false, 'mixed Studio access has no calendar');
+equal(resolveServiceCommercialModes({ ...legacyAccess, commercial_price_options: options.map(o => ({ ...o, accessType: 'scheduled', frequencyType: 'weekly', frequencyCount: 2 })) }, 'studio').studioServiceType, 'individual', 'scheduled lessons with unlimited credits remain scheduled');
+equal(resolveServiceCommercialModes({ ...legacyAccess, studio_service_type: 'group', service_kind: 'group' }, 'studio').studioServiceType, 'group', 'explicit classes retain their format');
+equal(resolveServiceCommercialModes({ ...legacyAccess, studio_service_type: 'non_scheduled' }, 'studio').studioServiceType, 'non_scheduled', 'deliverables retain their administrative owner');
+equal(resolveServiceCommercialModes({ ...legacyAccess, service_domain: 'clinical' }, 'mixed').requiresAppointment, true, 'clinical domain is not inferred from Studio offers');
+db.prepare("UPDATE services SET studio_service_type = 'individual', requires_appointment = 1, professional_id = 'charlyze', commercial_price_options_json = ? WHERE id = ?").run(JSON.stringify(options), accessId);
+const beforeLegacyRead = db.prepare('SELECT * FROM services WHERE id = ?').get(accessId);
+const listedAccess = call(ServiceController.list, {}).find(s => s.id === accessId);
+equal(listedAccess.studio_service_type, 'facility_access', 'settings list resolves legacy access');
+equal(listedAccess.requires_appointment, 0, 'settings list disables access scheduling');
+equal(db.prepare('SELECT * FROM services WHERE id = ?').get(accessId), beforeLegacyRead, 'listing never migrates stored data');
+call(ServiceController.update, { studioServiceType: listedAccess.studio_service_type }, { id: accessId });
+equal(normalizeCommercialPriceOptions(db.prepare('SELECT commercial_price_options_json FROM services WHERE id = ?').get(accessId).commercial_price_options_json), normalizeCommercialPriceOptions(beforeLegacyRead.commercial_price_options_json), 'fixing access identity preserves all commercial offers');
+for (const [id, snapshot] of snapshots) equal(db.prepare('SELECT commercial_snapshot_json FROM recurring_billing_plans WHERE id = ?').get(id).commercial_snapshot_json, snapshot, 'legacy identity correction preserves signed prices');
+const commissions = () => call(PayrollController.getServiceCommissions, {}, { id: 'charlyze' }).services;
+const accessPrices = commissions().find(s => s.service_id === accessId);
+equal(accessPrices.allow_single_booking, false, 'finance explicitly distinguishes no standalone sale');
+equal(accessPrices.standalone_price, null, 'no standalone sale is not a free class');
+equal(accessPrices.commercial_price_options.map(o => o.amountCents), options.map(o => o.amountCents), 'finance returns real plan prices');
+db.prepare("UPDATE services SET allow_single_booking = 0, allow_plan_booking = 1, allow_public_plan_booking = 0, periodic_price = 120, billing_mode = 'monthly', frequency_pricing_json = ? WHERE id = ?").run(JSON.stringify({ version: 1, enabled: true, unit: 'per_period', tables: { monthly: { '2': 18000 } } }), eight.id);
+const privatePrices = commissions().find(s => s.service_id === eight.id);
+equal(privatePrices.allow_plan_booking, true, 'private commercial plans stay visible to finance');
+equal(privatePrices.periodic_price, 120, 'legacy monthly price returned');
+equal(privatePrices.frequency_pricing.tables.monthly['2'], 18000, 'frequency-specific price returned in cents');
+equal(item(eight)[0].commissionAmount, 7.5, 'catalog display values do not replace contracted commission basis');
+const clinicalPrices = call(PayrollController.getServiceCommissions, {}, { id: 'clinical' }, 'clinic').services.find(s => s.service_id === legacy.id);
+equal(clinicalPrices.is_studio, false, 'clinical price display retains original branch');
+equal(clinicalPrices.price, 180, 'clinical price unaffected');
+
 assert.throws(() => readStudioCommissionTerms({ recognition: 'pending' }), /base de comissão/);
 assert.throws(() => readStudioCommissionTerms({ revenueSharePercent: 101 }), /rateio/);
 assert.throws(() => readStudioCommissionTerms({ sessionBasis: -1 }), /rateio/);
 
-
+// Cenário obrigatório: Acompanhamento Personal 1x/sem (4 créditos), R$ 120/mês, Charlyze 20% -> R$ 24,00
+const personalCase = fixture({ credits: 4, amount: 120, pro: 'charlyze', month: '2027-03', plan: true });
+db.prepare("UPDATE services SET name = 'Acompanhamento Personal' WHERE id = ?").run(personalCase.id);
+for (let n = 2; n <= 4; n++) {
+  const orig = db.prepare('SELECT * FROM appointments WHERE id = ?').get(personalCase.id);
+  insert('appointments', { ...orig, id: `${personalCase.id}-s${n}`, appointment_number: `${personalCase.id}-s${n}`, start_time: `2027-03-${String(5 + n * 5).padStart(2, '0')}T10:00:00`, end_time: `2027-03-${String(5 + n * 5).padStart(2, '0')}T10:50:00` });
+}
+rule(personalCase, 'percentage', 20, { recognition: 'received', allocation: 'contract_credits', revenueSharePercent: 100 });
+// 1. Pendente não gera repasse
+const { BillingCycleService } = require('./dist/services/billing-cycle.service');
+const pPlanRow = db.prepare('SELECT * FROM recurring_billing_plans WHERE id = ?').get(personalCase.id);
+const pWin = BillingCycleService.findCycleWindowForDate(pPlanRow, '2027-03-05');
+insert('payments', { id: personalCase.id + '-p1', tenant_id: 'studio', patient_id: personalCase.id, recurring_plan_id: personalCase.id, service_id: personalCase.id, amount: 120, status: 'pending', payment_method: 'pix', billing_cycle_key: pWin.billingCycleKey, competence_month: null });
+equal(item(personalCase, '2027-03').reduce((s, x) => s + x.commissionAmount, 0), 0, 'Charlyze pending payment yields R$ 0');
+// 2. Pagamento parcial confirmado (R$ 60 pago + R$ 60 pendente) gera exatamente R$ 12,00 (20% de 60)
+db.prepare("UPDATE payments SET status = 'paid', amount = 60, payment_date = '2027-03-10' WHERE id = ?").run(personalCase.id + '-p1');
+insert('payments', { id: personalCase.id + '-p2', tenant_id: 'studio', patient_id: personalCase.id, recurring_plan_id: personalCase.id, service_id: personalCase.id, amount: 60, status: 'pending', payment_method: 'pix', billing_cycle_key: null, competence_month: '2027-03' });
+equal(item(personalCase, '2027-03').reduce((s, x) => Math.round((s + x.commissionAmount) * 100) / 100, 0), 12, 'Charlyze partial confirmed R$ 60 yields R$ 12');
+// 3. Quitação integral (R$ 120 confirmados no mês) gera exatamente R$ 24,00 (20% de R$ 120)
+db.prepare("UPDATE payments SET status = 'paid', payment_date = '2027-03-12' WHERE id = ?").run(personalCase.id + '-p2');
+const confirmedTotal = item(personalCase, '2027-03').reduce((s, x) => Math.round((s + x.commissionAmount) * 100) / 100, 0);
+equal(confirmedTotal, 24, 'Charlyze confirmed R$ 120 yields R$ 24 (4 * R$ 6)');
+// 4. Reprocessamento idempotente mantém R$ 24,00 sem duplicar
+equal(item(personalCase, '2027-03').reduce((s, x) => Math.round((s + x.commissionAmount) * 100) / 100, 0), 24, 'Charlyze idempotent recalculation stays R$ 24');
+// 5. Estorno/cancelamento zera repasse elegível
+db.prepare("UPDATE payments SET status = 'refunded' WHERE recurring_plan_id = ?").run(personalCase.id);
+equal(item(personalCase, '2027-03').reduce((s, x) => s + x.commissionAmount, 0), 0, 'Charlyze refunded payment removes commission');
+// Restaura pago + co-atendimento em uma aula não perde participante elegível
+db.prepare("UPDATE payments SET status = 'paid' WHERE recurring_plan_id = ?").run(personalCase.id);
+insert('session_instructor_participants', { id: `${personalCase.id}-co`, tenant_id: 'studio', appointment_id: personalCase.id, professional_id: 'co', role: 'co_instructor', attendance_status: 'present' });
+rule(personalCase, 'fixed', 10, { recognition: 'received' }, 'per_present_student', 'co');
+equal(item(personalCase, '2027-03', 'charlyze').reduce((s, x) => Math.round((s + x.commissionAmount) * 100) / 100, 0), 24, 'Charlyze primary keeps R$ 24');
+equal(item(personalCase, '2027-03', 'co')[0].commissionAmount, 10, 'Co-instructor receives fixed R$ 10 without losing participant');
 
 console.log(`PASS ${checks + 3} targeted Studio finance/service checks`);

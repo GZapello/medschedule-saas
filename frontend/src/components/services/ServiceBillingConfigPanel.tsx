@@ -52,6 +52,9 @@ interface ServiceBillingConfigPanelProps {
   onFrequencyPricingChange?: (value: FrequencyPricing) => void;
   offeredWeeklySessions?: number;
   allowFrequencyPricing?: boolean;
+  isNonScheduled?: boolean;
+  allowSingleBooking?: boolean;
+  hasCommercialOptions?: boolean;
   onChange: (next: {
     billingMode: ServiceBillingMode;
     periodicPrice: string;
@@ -81,6 +84,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
   scheduleWeekdaysCount,
   compact = false,
   frequencyPricing, onFrequencyPricingChange, offeredWeeklySessions = 0, allowFrequencyPricing = false,
+  isNonScheduled = false, allowSingleBooking = true, hasCommercialOptions = false,
   onChange
 }) => {
   const isPeriodic = isPeriodicBillingMode(billingMode);
@@ -340,7 +344,12 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
       {/* 2. Seção periódica com Frequência, Regra de Cálculo e Valor */}
       {isPeriodic && (
         <div className="space-y-3 pt-1">
-          {/* Frequência semanal & Regra de cálculo */}
+          {isNonScheduled ? (
+            <div className="p-2.5 rounded-lg bg-teal-50/70 border border-teal-200 text-[11px] text-teal-900">
+              Acesso ou entrega sem agenda: não exige frequência semanal obrigatória nem cálculo por aula.
+            </div>
+          ) : (
+          /* Frequência semanal & Regra de cálculo */
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center justify-between">
@@ -394,6 +403,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
               </p>
             </div>
           </div>
+          )}
 
           {billingMode === 'count' && (
             <div>
@@ -575,19 +585,46 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
             <Calculator className="w-4 h-4 text-emerald-600" />
             <span>Resumo comercial — {serviceName || 'Serviço'}</span>
           </div>
-          {isPeriodic && (
+          {isPeriodic && !hasCommercialOptions && !isNonScheduled && (
             <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-medium border border-emerald-200">
               {displayCalc.referenceSessionsText}
             </span>
           )}
         </div>
 
-        {isPeriodic ? (
+        {hasCommercialOptions ? (
+          <div className="text-xs text-slate-700 py-1 space-y-1">
+            <p className="font-semibold text-emerald-900">
+              Planos e preços definidos nas Opções Comerciais configuradas acima.
+            </p>
+            <p className="text-[11px] text-slate-600">
+              Aula avulsa: <strong>{isNonScheduled || !allowSingleBooking ? 'Sem aula avulsa' : formatBRL(sessionPrice)}</strong> · Duração contratual, periodicidade de cobrança, valor mensal equivalente e valor total do contrato seguem cada opção ativa.
+            </p>
+          </div>
+        ) : isNonScheduled && isPeriodic ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+            <div className="bg-slate-50/70 p-2 rounded-lg border border-slate-100">
+              <span className="text-[10px] text-gray-500 block">Aula avulsa</span>
+              <span className="font-semibold text-gray-800">Sem aula avulsa</span>
+            </div>
+            <div className="bg-slate-50/70 p-2 rounded-lg border border-slate-100">
+              <span className="text-[10px] text-gray-500 block">Modelo operacional</span>
+              <span className="font-semibold text-gray-800">Acesso / vigência sem agenda</span>
+            </div>
+            <div className="bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
+              <span className="text-[10px] text-emerald-700 block">Valor do período</span>
+              <span className="font-semibold text-emerald-900">{formatBRL(displayCalc.effectivePrice)}</span>
+              <span className="text-[9px] text-emerald-600 block mt-0.5">
+                {SERVICE_BILLING_MODE_OPTIONS.find((o) => o.value === billingMode)?.label || billingMode}
+              </span>
+            </div>
+          </div>
+        ) : isPeriodic ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
             <div className="bg-slate-50/70 p-2 rounded-lg border border-slate-100">
               <span className="text-[10px] text-gray-500 block">Preço avulso</span>
-              <span className="font-semibold text-gray-800">{formatBRL(sessionPrice)}</span>
-              <span className="text-[9px] text-gray-400 block mt-0.5">por aula</span>
+              <span className="font-semibold text-gray-800">{allowSingleBooking ? formatBRL(sessionPrice) : 'Sem aula avulsa'}</span>
+              {allowSingleBooking && <span className="text-[9px] text-gray-400 block mt-0.5">por aula</span>}
             </div>
 
             <div className="bg-slate-50/70 p-2 rounded-lg border border-slate-100">
@@ -624,7 +661,7 @@ export const ServiceBillingConfigPanel: React.FC<ServiceBillingConfigPanelProps>
           </div>
         )}
 
-        {isPeriodic && (
+        {isPeriodic && !hasCommercialOptions && !isNonScheduled && (
           <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 text-xs">
             <div className="flex items-center gap-1.5 text-emerald-900 font-medium">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />

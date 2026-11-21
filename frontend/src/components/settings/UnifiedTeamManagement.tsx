@@ -1,3 +1,6 @@
+import { calculateCommercialOptionBreakdown, COMMERCIAL_UNIT_LABELS, normalizeCommercialPriceOptions, PAYMENT_PERIODICITY_LABELS, resolveServiceCommercialModes, StudioCommercialPriceOption } from '../../utils/studioAccessAndCommercial';
+import { formatCurrencyBRL, PLAN_DURATION_LABELS, SERVICE_BILLING_MODE_LABELS, ServiceBillingMode } from '../../utils/establishmentContext';
+import { FrequencyPricing } from '../../utils/studioFrequencyPricing';
 import { PatientShareManagement } from '../staff/PatientShareManagement';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
@@ -262,6 +265,14 @@ export const UnifiedTeamManagement: React.FC = () => {
     commission_value: number | null;
     group_payout_basis: 'per_class' | 'per_present_student';
     is_studio?: boolean;
+    allow_single_booking?: boolean;
+    allow_plan_booking?: boolean;
+    studio_service_type?: string;
+    standalone_price?: number | null;
+    periodic_price?: number | null;
+    billing_mode?: ServiceBillingMode;
+    commercial_price_options?: StudioCommercialPriceOption[];
+    frequency_pricing?: FrequencyPricing | null;
     studio_terms?: { recognition: 'performed' | 'received'; allocation: 'none' | 'contract_credits' | 'fixed_session'; sessionBasis: number; revenueSharePercent: number };
     rule_active: number | boolean;
   }>>([]);
@@ -1815,9 +1826,9 @@ export const UnifiedTeamManagement: React.FC = () => {
                                         className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                                       />
                                       <span className="font-semibold text-xs text-slate-800">{svc.service_name}</span>
-                                      <span className="text-[11px] text-slate-500">
-                                        ({svc.is_studio ? 'Avulso: ' : ''}R$ {Number(svc.price || 0).toFixed(2).replace('.', ',')})
-                                      </span>
+                                      {!svc.is_studio && <span className="text-[11px] text-slate-500">
+                                        (R$ {Number(svc.price || 0).toFixed(2).replace('.', ',')})
+                                      </span>}
                                       {isGroup && (
                                         <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-teal-100 text-teal-800">
                                           Turma
@@ -1832,6 +1843,34 @@ export const UnifiedTeamManagement: React.FC = () => {
                                       </span>
                                     )}
                                   </div>
+
+                                  {svc.is_studio && (() => {
+                                    const modes = resolveServiceCommercialModes({ ...svc, service_domain: 'studio' });
+                                    const options = modes.allowPlanBooking ? normalizeCommercialPriceOptions(svc.commercial_price_options).filter(o => o.active) : [];
+                                    const frequencyTable = modes.allowPlanBooking && svc.frequency_pricing?.enabled
+                                      ? svc.frequency_pricing.tables[svc.frequency_pricing.unit === 'per_session' ? 'per_session' : svc.billing_mode as keyof FrequencyPricing['tables']]
+                                      : null;
+                                    return <div aria-label={`Preços de ${svc.service_name}`} className="mt-1.5 space-y-1 text-[11px] text-slate-600">
+                                      <p>{modes.allowSingleBooking ? `Avulso: ${formatCurrencyBRL(modes.standalonePrice || 0)}` : 'Sem aula avulsa'}</p>
+                                      {options.map(option => {
+                                        const quote = calculateCommercialOptionBreakdown(option);
+                                        return <p key={option.id}>
+                                          <span className="font-semibold">Plano {option.label || PLAN_DURATION_LABELS[option.contractDurationCode]}: {formatCurrencyBRL(quote.unitAmountReais)}</span>
+                                          {' · '}{COMMERCIAL_UNIT_LABELS[option.commercialUnit]}
+                                          {' · Contrato: '}{PLAN_DURATION_LABELS[option.contractDurationCode]}
+                                          {' · '}{PAYMENT_PERIODICITY_LABELS[option.paymentPeriodicity]}
+                                          {' · Por cobrança: '}{formatCurrencyBRL(option.paymentPeriodicity === 'installments' ? quote.installmentAmountReais : quote.cycleAmountReais)}
+                                        </p>;
+                                      })}
+                                      {options.length === 0 && frequencyTable && Object.entries(frequencyTable).map(([frequency, cents]) => <p key={frequency}>
+                                        Plano {frequency === 'unlimited' ? 'ilimitado' : `${frequency}x/semana`}: {formatCurrencyBRL(cents / 100)}
+                                        {' · '}{svc.frequency_pricing?.unit === 'per_session' ? 'por aula no plano' : SERVICE_BILLING_MODE_LABELS[svc.billing_mode || 'monthly']}
+                                      </p>)}
+                                      {options.length === 0 && !frequencyTable && modes.allowPlanBooking && Number(svc.periodic_price) > 0 && <p>
+                                        Plano: {formatCurrencyBRL(Number(svc.periodic_price))} · {SERVICE_BILLING_MODE_LABELS[svc.billing_mode || 'monthly']}
+                                      </p>}
+                                    </div>;
+                                  })()}
 
                                   {active && svc.is_studio && (() => {
                                     const terms = svc.studio_terms || { recognition: 'performed' as const, allocation: 'none' as const, sessionBasis: 0, revenueSharePercent: 100 };

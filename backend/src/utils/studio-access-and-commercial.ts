@@ -1711,17 +1711,6 @@ export function resolveServiceCommercialModes(
     };
   }
 
-  const studioServiceType = normalizeStudioServiceType(
-    srv.studio_service_type ?? srv.studioServiceType,
-    srv.service_kind ?? srv.serviceKind,
-    srv.requires_appointment ?? srv.requiresAppointment
-  );
-  const reqApptRaw = parseBoolNullable(srv.requires_appointment ?? srv.requiresAppointment);
-  const requiresAppointment =
-    studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled'
-      ? false
-      : (reqApptRaw !== null ? reqApptRaw : true);
-
   const commercialOptions = normalizeCommercialPriceOptions(
     srv.commercial_options_json ??
       srv.commercial_price_options_json ??
@@ -1729,6 +1718,27 @@ export function resolveServiceCommercialModes(
       srv.commercialPriceOptions ??
       srv.commercialOptions
   ).filter((o) => o.active);
+  const normalizedType = normalizeStudioServiceType(
+    srv.studio_service_type ?? srv.studioServiceType,
+    srv.service_kind ?? srv.serviceKind,
+    srv.requires_appointment ?? srv.requiresAppointment
+  );
+  // Legacy catalogues may retain the schema's "individual" default even though
+  // their only commercial offers are access plans. Use the public booking rule;
+  // a scheduled plan with unlimited credits is still an appointment service.
+  const studioServiceType = normalizedType === 'individual' &&
+    (srv.service_kind ?? srv.serviceKind) !== 'group' &&
+    isServiceNonScheduledForPublic({
+      studio_service_type: normalizedType,
+      requires_appointment: srv.requires_appointment ?? srv.requiresAppointment,
+      commercial_price_options: commercialOptions
+    }) ? 'facility_access' : normalizedType;
+  const reqApptRaw = parseBoolNullable(srv.requires_appointment ?? srv.requiresAppointment);
+  const requiresAppointment =
+    studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled'
+      ? false
+      : (reqApptRaw !== null ? reqApptRaw : true);
+
   const hasActiveCommercialOptions = commercialOptions.length > 0;
   const hasFrequencyPricing = hasEnabledFreqPricing(
     srv.frequency_pricing_json ?? srv.frequencyPricing

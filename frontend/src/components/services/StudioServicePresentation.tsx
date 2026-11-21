@@ -1,6 +1,11 @@
 import { FrequencyPricing, WeeklyMeeting, supportsFrequencyPricing, offeredWeeklyMeetings } from '../../utils/studioFrequencyPricing';
 import { calculateStudioRecurringPrice, StudioPricingRule } from '../../utils/studioPricing';
-import { StudioCommercialPriceOption, StudioOptionalAddonsConfig } from '../../utils/studioAccessAndCommercial';
+import {
+  calculateCommercialOptionBreakdown,
+  PAYMENT_PERIODICITY_LABELS,
+  StudioCommercialPriceOption,
+  StudioOptionalAddonsConfig
+} from '../../utils/studioAccessAndCommercial';
 
 const formatCurrencyFromCents = (cents?: number | null) =>
   formatCurrencyBRL((Number(cents) || 0) / 100);
@@ -209,8 +214,12 @@ export function StudioServiceIndicators() {
           ? 'Aula coletiva'
           : 'Individual';
   const secondPill = isNonScheduled ? 'Sem agendamento' : frequency(v);
+  const activeCommercialCount = (v.commercialPriceOptions || []).filter(o => o.active !== false).length;
+  const thirdPill = activeCommercialCount > 0
+    ? `${activeCommercialCount} plano${activeCommercialCount === 1 ? '' : 's'} comercial${activeCommercialCount === 1 ? '' : 'is'}`
+    : SERVICE_BILLING_MODE_LABELS[v.billingMode];
   return <div className="flex flex-wrap gap-1.5 px-5 pb-3 sm:px-6 text-[11px] shrink-0 border-b border-slate-100">
-    {[kindLabel, secondPill, SERVICE_BILLING_MODE_LABELS[v.billingMode], 'Academia & Studio'].map((label, index) =>
+    {[kindLabel, secondPill, thirdPill, 'Academia & Studio'].map((label, index) =>
       <span key={index} className={`px-2.5 py-1 rounded-lg border font-medium ${index === 3 ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-teal-50 border-teal-100 text-teal-800'}`}>{label}</span>)}
   </div>;
 }
@@ -252,36 +261,48 @@ function SummaryCards({ values: v }: { values: PresentationValues }) {
     <div className="rounded-2xl border border-teal-100 bg-white p-4">
       <h4 className="flex items-center gap-2 font-bold text-sm text-teal-800"><CreditCard className="w-4 h-4" />Resumo comercial</h4>
       <dl className="mt-4 space-y-3 text-xs">
-        {!isNonScheduled && (
-          <SummaryRow label="Aula avulsa" value={singleEnabled ? money(v.price) : 'Não vende avulso'} />
+        <SummaryRow
+          label="Aula avulsa"
+          value={isNonScheduled ? 'Sem aula avulsa' : (singleEnabled ? money(v.price) : 'Não vende avulso')}
+        />
+        {activeCommercial.length === 0 && (
+          <>
+            <SummaryRow label="Tipo de cobrança" value={SERVICE_BILLING_MODE_LABELS[v.billingMode]} />
+            {isPeriodicBillingMode(v.billingMode) && <>
+              {frequencyTotal(v) !== null && <SummaryRow label="Preço" value="Conforme frequência semanal" />}
+              {v.periodicPrice?.trim() && <SummaryRow label="Valor por período" value={money(frequencyTotal(v) ?? v.periodicPrice)} />}
+              {!isNonScheduled && (
+                <SummaryRow label={v.billingMode === 'count' ? 'Quantidade de aulas' : 'Aulas por semana'} value={String(v.billingMode === 'count' ? v.includedSessionsCount : v.weeklySessionsCount)} />
+              )}
+            </>}
+          </>
         )}
-        <SummaryRow label="Tipo de cobrança" value={SERVICE_BILLING_MODE_LABELS[v.billingMode]} />
-        {isPeriodicBillingMode(v.billingMode) && <>
-          {frequencyTotal(v) !== null && <SummaryRow label="Preço" value="Conforme frequência semanal" />}
-          {v.periodicPrice?.trim() && <SummaryRow label="Valor por período" value={money(frequencyTotal(v) ?? v.periodicPrice)} />}
-          {!isNonScheduled && (
-            <SummaryRow label={v.billingMode === 'count' ? 'Quantidade de aulas' : 'Aulas por semana'} value={String(v.billingMode === 'count' ? v.includedSessionsCount : v.weeklySessionsCount)} />
-          )}
-        </>}
         {v.allowPlanBooking !== false && v.planCreditMode && (
           <SummaryRow
             label="Regra dos planos"
             value={
-              v.planCreditMode === 'weekly_guaranteed'
-                ? 'Frequência semanal garantida (Modelo B)'
-                : v.planCreditMode === 'unlimited'
-                  ? 'Acesso / créditos livres'
+              isFacilityAccess || v.planCreditMode === 'unlimited'
+                ? 'Acesso livre / vigência contratual'
+                : v.planCreditMode === 'weekly_guaranteed'
+                  ? 'Frequência semanal garantida (Modelo B)'
                   : 'Créditos fixos por ciclo (Modelo A)'
             }
           />
         )}
         {activeCommercial.length > 0 && (
           <SummaryRow
-            label="Opções comerciais"
+            label={`Opções comerciais (${activeCommercial.length})`}
             value={activeCommercial
-              .slice(0, 4)
-              .map(o => `${o.label || 'Plano'}: ${formatCurrencyFromCents(o.amountCents)}`)
-              .join('\n')}
+              .map(o => {
+                const q = calculateCommercialOptionBreakdown(o);
+                const freqText = o.frequencyType === 'unlimited'
+                  ? 'Acesso livre'
+                  : (o.frequencyType === 'fixed_count'
+                      ? `${o.frequencyCount || 1} aulas`
+                      : `${o.frequencyCount || 1}x/${o.frequencyType === 'monthly' ? 'mês' : 'sem'}`);
+                return `${o.label || 'Plano'} (${freqText})\nContrato: ${PLAN_DURATION_LABELS[o.contractDurationCode]} · ${PAYMENT_PERIODICITY_LABELS[o.paymentPeriodicity]}\nEquiv. mensal: ${formatCurrencyFromCents(q.monthlyEquivalentCents)}/mês · Total contrato: ${formatCurrencyFromCents(q.totalContractAmountCents)}`;
+              })
+              .join('\n\n')}
           />
         )}
         {v.optionalAddons?.enabled && activeAddons.length > 0 && (

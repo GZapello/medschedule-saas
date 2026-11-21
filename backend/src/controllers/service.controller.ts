@@ -834,7 +834,7 @@ export class ServiceController {
         const schedules = schedulesByService.get(srv.id) || [];
         const recConfig = parseServiceRecurrenceConfig(srv);
         const resolvedStudioType = resolvedDomain === 'studio'
-          ? normalizeStudioServiceType(srv.studio_service_type, srv.service_kind)
+          ? resolveServiceCommercialModes({ ...srv, service_domain: resolvedDomain }, establishmentProfile).studioServiceType
           : 'individual';
         const resolvedRequiresAppt =
           resolvedDomain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled')
@@ -906,8 +906,18 @@ export class ServiceController {
           commercialPriceOptions.find(o => o.active)?.amountCents
             ? commercialPriceOptions.find(o => o.active)!.amountCents / 100
             : 0;
+        const isFacilityAccessNormalized =
+          resolvedDomain === 'studio' && resolvedStudioType === 'facility_access';
         return {
           ...srv,
+          ...(isFacilityAccessNormalized
+            ? {
+                professional_id: null,
+                clinical_module: null,
+                duration_minutes: 0,
+                buffer_minutes: 0
+              }
+            : {}),
           price: resolvedDomain === 'studio'
             ? (commercialModes.standalonePrice !== null ? commercialModes.standalonePrice : 0)
             : Number(srv.price || 0),
@@ -959,8 +969,8 @@ export class ServiceController {
           default_plan_duration: recConfig.defaultPlanDuration,
           custom_recurrence_intervals: recConfig.customIntervals,
           default_recurrence_interval: recConfig.defaultCustomInterval,
-          linked_professional_ids: linkedProfIds,
-          linked_professionals: linkedProfs,
+          linked_professional_ids: isFacilityAccessNormalized ? [] : linkedProfIds,
+          linked_professionals: isFacilityAccessNormalized ? [] : linkedProfs,
           class_schedules: schedules,
           weekly_schedule_summary: buildWeeklyScheduleSummary(schedules),
           schedule_diagnostics: scheduleDiagnostics,

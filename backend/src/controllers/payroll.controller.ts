@@ -1,3 +1,5 @@
+import { normalizeCommercialPriceOptions, resolveServiceCommercialModes } from '../utils/studio-access-and-commercial';
+import { readFrequencyPricing } from '../utils/studio-frequency-pricing';
 import { readStudioCommissionTerms, studioPayrollBasis } from '../utils/studio-payroll-basis';
 import { getTenantEstablishmentProfile, resolveServiceDomain } from '../utils/establishment-context';
 import { Request, Response } from 'express';
@@ -1397,6 +1399,11 @@ export class PayrollController {
           COALESCE(ps.custom_price, s.price, 0) as price,
           COALESCE(s.service_kind, 'individual') as service_kind,
           s.default_capacity, s.service_domain, s.clinical_module,
+          s.studio_service_type, s.requires_appointment, s.requires_active_contract,
+          s.allow_single_booking, s.allow_plan_booking, s.allow_public_booking,
+          s.allow_public_single_booking, s.allow_public_plan_booking,
+          s.billing_mode, s.periodic_price, s.plan_credit_mode, s.plan_credits_per_cycle,
+          s.commercial_price_options_json, s.frequency_pricing_json,
           psc.studio_terms_json,
           psc.id as rule_id,
           psc.commission_type,
@@ -1422,7 +1429,25 @@ export class PayrollController {
         professionalName: prof.name,
         generalCommissionPercentage: Number(prof.commission_percentage || 0),
         remunerationType: prof.remuneration_type || 'commission',
-        services: services.map(s => ({ ...s, is_studio: resolveServiceDomain({ establishmentProfile: getTenantEstablishmentProfile(tenantId), serviceDomain: s.service_domain, serviceKind: s.service_kind, clinicalModule: s.clinical_module }) === 'studio', studio_terms: readStudioCommissionTerms(s.studio_terms_json) }))
+        services: services.map(s => {
+          const profile = getTenantEstablishmentProfile(tenantId);
+          const domain = resolveServiceDomain({ establishmentProfile: profile, serviceDomain: s.service_domain, serviceKind: s.service_kind, clinicalModule: s.clinical_module });
+          const isStudio = domain === 'studio';
+          const modes = resolveServiceCommercialModes({ ...s, service_domain: domain }, profile);
+          return {
+            ...s,
+            is_studio: isStudio,
+            studio_terms: readStudioCommissionTerms(s.studio_terms_json),
+            ...(isStudio ? {
+              studio_service_type: modes.studioServiceType,
+              allow_single_booking: modes.allowSingleBooking,
+              allow_plan_booking: modes.allowPlanBooking,
+              standalone_price: modes.standalonePrice,
+              commercial_price_options: normalizeCommercialPriceOptions(s.commercial_price_options_json),
+              frequency_pricing: readFrequencyPricing(s.frequency_pricing_json)
+            } : {})
+          };
+        })
       });
     } catch (err: any) {
       console.error('[PayrollController.getServiceCommissions] Erro:', err);

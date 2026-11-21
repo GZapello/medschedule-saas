@@ -22,7 +22,6 @@ import {
   normalizeOptionalAddonsConfig,
   normalizeStudioAccessConfig,
   normalizeStudioPriceAdjustments,
-  normalizeStudioServiceType,
   PlanCreditMode,
   resolveServiceCommercialModes,
   StudioAccessConfig,
@@ -222,15 +221,15 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
           clinicalModule: serviceToEdit.clinical_module
         });
         const recCfg = parseServiceRecurrenceConfig(serviceToEdit);
+        const modes = resolveServiceCommercialModes({ ...serviceToEdit, service_domain: domain }, establishmentProfile);
+        const resolvedStudioType = modes.studioServiceType;
+        const isEditNonScheduled = domain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled');
         setName(serviceToEdit.name || '');
         setPrice(String(serviceToEdit.price ?? '150'));
-        setDurationMinutes(Number(serviceToEdit.duration_minutes) || 50);
-        setBufferMinutes(Number(serviceToEdit.buffer_minutes) || 0);
+        setDurationMinutes(isEditNonScheduled ? 0 : (Number(serviceToEdit.duration_minutes) || 50));
+        setBufferMinutes(isEditNonScheduled ? 0 : (Number(serviceToEdit.buffer_minutes) || 0));
         setModality((serviceToEdit.modality as any) || 'both');
         setServiceDomain(domain);
-        const resolvedStudioType = domain === 'studio'
-          ? normalizeStudioServiceType(serviceToEdit.studio_service_type, serviceToEdit.service_kind, (serviceToEdit as any).requires_appointment)
-          : 'individual';
         setStudioServiceType(resolvedStudioType);
         setServiceKind(domain === 'studio' && (serviceToEdit.service_kind === 'group' || resolvedStudioType === 'group') ? 'group' : 'individual');
         setAccessConfig(normalizeStudioAccessConfig(serviceToEdit.access_config));
@@ -238,7 +237,6 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         const normalizedCommercial = normalizeCommercialPriceOptions(serviceToEdit.commercial_price_options);
         setCommercialPriceOptions(normalizedCommercial);
         setOptionalAddons(normalizeOptionalAddonsConfig(serviceToEdit.optional_addons));
-        const modes = resolveServiceCommercialModes(serviceToEdit);
         setAllowPublicBooking(serviceToEdit.allow_public_booking !== 0 && serviceToEdit.allow_public_booking !== false);
         setAllowSingleBooking(modes.allowSingleBooking);
         setAllowPlanBooking(modes.allowPlanBooking);
@@ -279,13 +277,12 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         );
         setAvailabilityWindows(Array.isArray(serviceToEdit.availability_windows) ? serviceToEdit.availability_windows : []);
         setDescription(serviceToEdit.description || '');
-        const isEditNonScheduled = domain === 'studio' && (resolvedStudioType === 'facility_access' || resolvedStudioType === 'non_scheduled');
         const editPrimaryId = domain === 'studio' && resolvedStudioType === 'facility_access' ? '' : (serviceToEdit.professional_id || (isEditNonScheduled ? '' : (initialProfessionalId || professionals[0]?.id || '')));
         setProfessionalId(editPrimaryId);
         const existingLinked = Array.isArray(serviceToEdit.linked_professional_ids) && serviceToEdit.linked_professional_ids.length > 0
           ? serviceToEdit.linked_professional_ids
           : (editPrimaryId ? [editPrimaryId] : []);
-        setLinkedProfessionalIds(Array.from(new Set([editPrimaryId, ...existingLinked].filter(Boolean))));
+        setLinkedProfessionalIds(resolvedStudioType === 'facility_access' ? [] : Array.from(new Set([editPrimaryId, ...existingLinked].filter(Boolean))));
       } else {
         let defaultProf = '';
         if (initialProfessionalId && professionals.some(p => p.id === initialProfessionalId)) {
@@ -455,8 +452,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         (!isEditing || serviceToEdit?.service_kind !== 'group') &&
         draftSchedules.length > 0;
       const payload: any = {
-        professionalId: professionalId || null,
-        ...(showStudioConfig ? { linkedProfessionalIds: normalizedLinkedIds } : {}),
+        professionalId: showStudioConfig && studioServiceType === 'facility_access' ? null : (professionalId || null),
+        ...(showStudioConfig ? { linkedProfessionalIds: studioServiceType === 'facility_access' ? [] : normalizedLinkedIds } : {}),
         name: name.trim(),
         price: safePrice,
         durationMinutes: requiresAppointment ? (Number(durationMinutes) || 50) : 0,
@@ -926,6 +923,9 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
                 allowFrequencyPricing={showStudioConfig}
                 frequencyPricing={frequencyPricing} onFrequencyPricingChange={setFrequencyPricing}
                 offeredWeeklySessions={studioServiceType === 'facility_access' ? 7 : contractableWeeklySessions}
+                isNonScheduled={studioServiceType === 'facility_access' || studioServiceType === 'non_scheduled'}
+                allowSingleBooking={allowSingleBooking}
+                hasCommercialOptions={commercialPriceOptions.some(o => o.active !== false)}
                 includedSessionsCount={includedSessionsCount}
                 defaultPackageId={defaultPackageId}
                 defaultBillingDueDay={defaultBillingDueDay}
